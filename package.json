@@ -1,6 +1,6 @@
 {
   "name": "qidi-wikier",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "description": "Pipeline for converting QIDI Telegram exports into a curated knowledge base.",
