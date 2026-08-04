@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
-import { prepareTelegramExport } from "./pipeline.ts";
+import { prepareTelegramExport } from "./pipeline-v2.ts";
 
 interface CliOptions {
   input?: string;
   output?: string;
   sourceName?: string;
   maxChars: number;
+  contextWindowMinutes: number;
+  sameAuthorWindowMinutes: number;
+  minContextScore: number;
+  reviewSampleSize: number;
 }
 
 function usage(): string {
@@ -14,9 +18,13 @@ function usage(): string {
   npm run prepare -- --input <telegram.json> --output <directory> [options]
 
 Options:
-  --source-name <name>   Stable source identifier (default: input filename)
-  --max-chars <number>   Approximate maximum Markdown chunk size (default: 600000)
-  --help                 Show this message
+  --source-name <name>                 Stable source identifier (default: input filename)
+  --max-chars <number>                 Approximate maximum Markdown chunk size (default: 600000)
+  --context-window-minutes <number>    Window for linking adjacent authors (default: 12)
+  --same-author-window-minutes <number> Window for fragmented messages by one author (default: 45)
+  --min-context-score <number>         Minimum heuristic score for an inferred link (default: 4.0)
+  --review-sample-size <number>         Lowest-confidence links written to review Markdown (default: 100)
+  --help                               Show this message
 
 Example:
   npm run prepare -- \\
@@ -27,7 +35,13 @@ Example:
 }
 
 function parseArgs(args: string[]): CliOptions {
-  const options: CliOptions = { maxChars: 600_000 };
+  const options: CliOptions = {
+    maxChars: 600_000,
+    contextWindowMinutes: 12,
+    sameAuthorWindowMinutes: 45,
+    minContextScore: 4.0,
+    reviewSampleSize: 100,
+  };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--help" || arg === "-h") {
@@ -40,6 +54,10 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === "--output") options.output = value;
     else if (arg === "--source-name") options.sourceName = value;
     else if (arg === "--max-chars") options.maxChars = Number(value);
+    else if (arg === "--context-window-minutes") options.contextWindowMinutes = Number(value);
+    else if (arg === "--same-author-window-minutes") options.sameAuthorWindowMinutes = Number(value);
+    else if (arg === "--min-context-score") options.minContextScore = Number(value);
+    else if (arg === "--review-sample-size") options.reviewSampleSize = Number(value);
     else throw new Error(`Unknown argument: ${arg}`);
     index += 1;
   }
@@ -52,12 +70,24 @@ try {
   if (!Number.isFinite(options.maxChars) || options.maxChars < 50_000) {
     throw new Error("--max-chars must be a number of at least 50000");
   }
+  for (const [name, value] of [
+    ["--context-window-minutes", options.contextWindowMinutes],
+    ["--same-author-window-minutes", options.sameAuthorWindowMinutes],
+    ["--min-context-score", options.minContextScore],
+    ["--review-sample-size", options.reviewSampleSize],
+  ] as const) {
+    if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number`);
+  }
 
   await prepareTelegramExport({
     input: resolve(options.input),
     output: resolve(options.output),
     sourceName: options.sourceName,
     maxChars: options.maxChars,
+    contextWindowMinutes: options.contextWindowMinutes,
+    sameAuthorWindowMinutes: options.sameAuthorWindowMinutes,
+    minContextScore: options.minContextScore,
+    reviewSampleSize: options.reviewSampleSize,
   });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
