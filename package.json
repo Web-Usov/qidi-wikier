@@ -7,7 +7,7 @@
   "scripts": {
     "ingest": "node --experimental-strip-types src/cli.ts",
     "check": "node scripts/check.mjs",
-    "test": "node --experimental-strip-types --test test/*.test.ts"
+    "test": "node scripts/test.mjs"
   },
   "engines": {
     "node": ">=22.6"
