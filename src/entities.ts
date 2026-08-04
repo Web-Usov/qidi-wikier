@@ -58,7 +58,7 @@ const COMPONENTS: Array<[string, RegExp]> = [
   ["ptfe", /\bptfe\b|тефлонов.{0,8}труб/iu],
   ["firmware-config", /\bконфиг|printer\.cfg|config\.cfg|\bпрошив|\bfirmware\b/iu],
   ["supports", /\bподдержк|\bsupports?\b/iu],
-  ["seam", /\bшов\b|\bseam\b/iu],
+  ["seam", /\b(?:шов|шва|шву|швом|шве|швы|швов|швам|швами|швах)\b|\bseam\b/iu],
   ["layer-adhesion", /межсло|рассло|деламинац|слои.{0,20}(?:расход|лома|держ)/iu],
   ["warping", /\bварпинг|загибает|загибается|угол.{0,12}(?:подня|оторв|загнул)/iu],
   ["clog", /\bзасор|\bпробк|\bclog/iu],
