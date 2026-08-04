@@ -106,3 +106,23 @@ test("suppresses repeated top-level posts from the same author", async () => {
   assert.equal(statistics.inferredContextLinks, 0);
   assert.equal(statistics.contextGraphDiagnostics.rejectedDuplicate, 1);
 });
+
+test("suppresses paraphrased repeat questions and marketplace product posts", async () => {
+  const { statistics } = await runFixture([
+    message(600, 10, "Alex", "Всех приветствую! Скиньте форму и размеры металлической части датчика филамента для QIDI Q2, той что с пружинкой."),
+    message(601, 30, "Alex", "Всех приветствую! Может кто скинуть форму и размеры металлической части датчика филамента для QIDI Q2?"),
+    message(610, 50, "Seller", "PPS CF15, катушка 1 кг https://ozon.ru/t/example"),
+  ]);
+  assert.equal(statistics.exactThreads, 2);
+  assert.equal(statistics.inferredContextLinks, 0);
+  assert.equal(statistics.contextGraphDiagnostics.rejectedDuplicate, 1);
+  assert.equal(statistics.removalCounts["marketplace-or-sale"], 1);
+});
+
+test("rejects a primary material topic shift despite incidental material mentions", async () => {
+  const { statistics } = await runFixture([
+    message(700, 10, "Alex", "Печатаю две вазы из PETG. Вторая не прилипает после калибровки стола. В чём причина?"),
+    message(701, 40, "Alex", "Вдогонку другой вопрос. ASA первый раз печатаю, к PEI прилипает намертво. С PLA, PETG и ABS такой беды нет. Как ослабить адгезию ASA?"),
+  ]);
+  assert.equal(statistics.inferredContextLinks, 0);
+});
