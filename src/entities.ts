@@ -1,6 +1,7 @@
 export interface EntityProfile {
   materials: string[];
   materialFamilies: string[];
+  primaryMaterialFamilies: string[];
   printers: string[];
   components: string[];
   brands: string[];
@@ -88,11 +89,43 @@ function matches(list: Array<[string, RegExp]>, text: string): string[] {
   return list.filter(([, pattern]) => pattern.test(text)).map(([name]) => name);
 }
 
+function matchPositions(pattern: RegExp, text: string): Array<{ index: number; value: string }> {
+  const flags = [...new Set(`${pattern.flags.replace(/g/g, "")}g`.split(""))].join("");
+  const globalPattern = new RegExp(pattern.source, flags);
+  return [...text.matchAll(globalPattern)].map((match) => ({ index: match.index ?? 0, value: match[0] }));
+}
+
+function detectPrimaryMaterialFamilies(text: string): string[] {
+  const scores = new Map<string, number>();
+  for (const [, family, pattern] of MATERIALS) {
+    for (const match of matchPositions(pattern, text)) {
+      const context = text.slice(
+        Math.max(0, match.index - 60),
+        Math.min(text.length, match.index + match.value.length + 60),
+      );
+      let score = 1;
+      if (match.index < 280) score += 1.5;
+      if (/(?:печатаю|печатал|печать|материал|пластик|филамент|зарядил|заправил|сушил|сушу|температур|сопл|стол|камера|первый раз|пробую)/iu.test(context)) score += 1;
+      scores.set(family, (scores.get(family) ?? 0) + score);
+    }
+  }
+
+  const ranked = [...scores.entries()]
+    .map(([family, score]) => ({ family, score }))
+    .sort((a, b) => b.score - a.score || a.family.localeCompare(b.family));
+  const first = ranked[0];
+  const second = ranked[1];
+  if (!first || first.score < 2.5) return [];
+  if (!second || first.score >= second.score + 2 || first.score >= second.score * 1.6) return [first.family];
+  return [];
+}
+
 export function extractEntities(text: string): EntityProfile {
   const materialMatches = MATERIALS.filter(([, , pattern]) => pattern.test(text));
   return {
     materials: [...new Set(materialMatches.map(([name]) => name))],
     materialFamilies: [...new Set(materialMatches.map(([, family]) => family))],
+    primaryMaterialFamilies: detectPrimaryMaterialFamilies(text),
     printers: [...new Set(matches(PRINTERS, text))],
     components: [...new Set(matches(COMPONENTS, text))],
     brands: [...new Set(matches(BRANDS, text))],
@@ -106,6 +139,13 @@ export function entityIntersection(a: string[], b: string[]): string[] {
 
 export function entityProfilesConflict(a: EntityProfile, b: EntityProfile): string[] {
   const conflicts: string[] = [];
+  if (
+    a.primaryMaterialFamilies.length === 1
+    && b.primaryMaterialFamilies.length === 1
+    && entityIntersection(a.primaryMaterialFamilies, b.primaryMaterialFamilies).length === 0
+  ) {
+    conflicts.push(`разные основные материалы: ${a.primaryMaterialFamilies[0]} vs ${b.primaryMaterialFamilies[0]}`);
+  }
   if (a.materialFamilies.length && b.materialFamilies.length && entityIntersection(a.materialFamilies, b.materialFamilies).length === 0) {
     conflicts.push(`разные материалы: ${a.materialFamilies.join("/")} vs ${b.materialFamilies.join("/")}`);
   }
