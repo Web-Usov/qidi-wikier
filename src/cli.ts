@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
-import { prepareTelegramExport } from "./pipeline-v2.ts";
+import { prepareTelegramExport } from "./pipeline.ts";
 
 interface CliOptions {
   input?: string;
@@ -10,6 +10,7 @@ interface CliOptions {
   contextWindowMinutes: number;
   sameAuthorWindowMinutes: number;
   minContextScore: number;
+  minScoreMargin: number;
   reviewSampleSize: number;
 }
 
@@ -18,13 +19,14 @@ function usage(): string {
   npm run ingest -- --input <telegram.json> --output <directory> [options]
 
 Options:
-  --source-name <name>                 Stable source identifier (default: input filename)
-  --max-chars <number>                 Approximate maximum Markdown chunk size (default: 600000)
-  --context-window-minutes <number>    Window for linking adjacent authors (default: 12)
+  --source-name <name>                  Stable source identifier (default: input filename)
+  --max-chars <number>                  Approximate maximum Markdown chunk size (default: 600000)
+  --context-window-minutes <number>     Window for different authors (default: 12)
   --same-author-window-minutes <number> Window for fragmented messages by one author (default: 45)
-  --min-context-score <number>         Minimum heuristic score for an inferred link (default: 4.0)
-  --review-sample-size <number>         Lowest-confidence links written to review Markdown (default: 100)
-  --help                               Show this message
+  --min-context-score <number>          Minimum inferred-edge score (default: 4.0)
+  --min-score-margin <number>           Required gap from second-best candidate (default: 0.75)
+  --review-sample-size <number>         Stratified review sample size (default: 120)
+  --help                                Show this message
 
 Example:
   npm run ingest -- \\
@@ -39,8 +41,9 @@ function parseArgs(args: string[]): CliOptions {
     maxChars: 600_000,
     contextWindowMinutes: 12,
     sameAuthorWindowMinutes: 45,
-    minContextScore: 4.0,
-    reviewSampleSize: 100,
+    minContextScore: 4,
+    minScoreMargin: 0.75,
+    reviewSampleSize: 120,
   };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -57,6 +60,7 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === "--context-window-minutes") options.contextWindowMinutes = Number(value);
     else if (arg === "--same-author-window-minutes") options.sameAuthorWindowMinutes = Number(value);
     else if (arg === "--min-context-score") options.minContextScore = Number(value);
+    else if (arg === "--min-score-margin") options.minScoreMargin = Number(value);
     else if (arg === "--review-sample-size") options.reviewSampleSize = Number(value);
     else throw new Error(`Unknown argument: ${arg}`);
     index += 1;
@@ -67,18 +71,16 @@ function parseArgs(args: string[]): CliOptions {
 try {
   const options = parseArgs(process.argv.slice(2));
   if (!options.input || !options.output) throw new Error("Both --input and --output are required");
-  if (!Number.isFinite(options.maxChars) || options.maxChars < 50_000) {
-    throw new Error("--max-chars must be a number of at least 50000");
-  }
+  if (!Number.isFinite(options.maxChars) || options.maxChars < 50_000) throw new Error("--max-chars must be at least 50000");
   for (const [name, value] of [
     ["--context-window-minutes", options.contextWindowMinutes],
     ["--same-author-window-minutes", options.sameAuthorWindowMinutes],
     ["--min-context-score", options.minContextScore],
+    ["--min-score-margin", options.minScoreMargin],
     ["--review-sample-size", options.reviewSampleSize],
   ] as const) {
     if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number`);
   }
-
   await prepareTelegramExport({
     input: resolve(options.input),
     output: resolve(options.output),
@@ -87,6 +89,7 @@ try {
     contextWindowMinutes: options.contextWindowMinutes,
     sameAuthorWindowMinutes: options.sameAuthorWindowMinutes,
     minContextScore: options.minContextScore,
+    minScoreMargin: options.minScoreMargin,
     reviewSampleSize: options.reviewSampleSize,
   });
 } catch (error) {
