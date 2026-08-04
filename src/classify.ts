@@ -1,3 +1,4 @@
+import { extractEntities } from "./entities.ts";
 import type { NormalizedMessage } from "./telegram.ts";
 
 const ACKNOWLEDGEMENT = /^(спасибо|благодарю|понял|ясно|ок(?:ей)?|ага|угу|да|нет|точно|согласен|круто|класс|норм|плюсую|жд[её]м|доброе утро|добрый вечер|привет)[!.,… )]*(?:\p{Extended_Pictographic})*$/iu;
@@ -6,15 +7,16 @@ const MARKET = /(продам|куплю|обменяю|барахолк|дос�
 const TECHNICAL = /(qidi|ку2|q2|q1|plus\s*4|принтер|печать|сло[йя]|сопл|экстру|филамент|пластик|pla|petg|abs|asa|tpu|pa\d*|нейлон|карбон|стекловолок|gf\d*|cf\d*|температур|стол|камер|вентилятор|обдув|ретракт|pressure\s*advance|input\s*shap|рем[её]н|шкив|воблинг|резонанс|калибров|прошив|klipper|orca|g-?code|ошибк|qde\d+|box|бокс|сушк|катушк|ptfe|хотэнд|термистор|нагрев|адгези|усадк|мост|нависан|подач|пробк|засор|mesh|z[- ]?offset)/iu;
 
 export const QUESTION = /\?|^(?:кто|как|почему|зачем|что|где|куда|какой|какая|какие|можно ли|есть ли|подскажите|подскажите пожалуйста)(?:\s|$)/iu;
-export const CONTINUATION = /^(?:а\s|и\s|но\s|да[,\s]|нет[,\s]|у меня(?:\s|$)|тоже(?:\s|$)|это(?:\s|$)|там(?:\s|$)|тут(?:\s|$)|если(?:\s|$)|попробуй(?:\s|$)|скорее(?:\s|$)|потому(?:\s|$)|значит(?:\s|$)|возможно(?:\s|$)|видимо(?:\s|$)|точно(?:\s|$)|кстати(?:\s|$)|ещ[её](?:\s|$)|поднял(?:\s|$)|опустил(?:\s|$)|проверил(?:\s|$)|заменил(?:\s|$)|сделал(?:\s|$)|настроил(?:\s|$)|помогло(?:\s|$)|не помогло(?:\s|$)|я\s|он\s|она\s|они\s)/iu;
+export const STRONG_CONTINUATION = /^(?:проверил|проверила|заменил|заменила|настроил|настроила|поднял|подняла|опустил|опустила|сделал как|сделала как|после этого|в итоге|результат|помогло|не помогло|исправил|исправила|перепечатал|перепечатала)(?:\s|[:,.!-]|$)/iu;
+export const WEAK_CONTINUATION = /^(?:а|и|но|да|нет|я|он|она|они|это|там|тут|ещ[её])(?:\s|[,.:;!?-]|$)/iu;
+export const TOPIC_SHIFT = /^(?:кстати|к слову|другая тема|оффтоп)(?:\s|[,.:;!?-]|$)/iu;
 
 const STOP_WORDS = new Set([
-  "без", "был", "была", "были", "быть", "вам", "вас", "вот", "все", "всё", "где", "для", "его", "если", "есть", "ещё", "или", "как", "когда", "который", "меня", "мне", "можно", "мой", "надо", "нет", "они", "она", "оно", "под", "при", "просто", "про", "раз", "так", "там", "тебя", "тоже", "только", "тут", "уже", "хочу", "что", "это", "этот", "эта", "эти", "очень", "сейчас", "потом", "после", "перед", "через", "пока", "кто", "куда", "какой", "какая", "какие", "почему", "зачем", "будет", "может", "нужно", "нужен", "нужна", "себя", "свой", "свои", "такой", "такая", "такие", "того", "тому", "тогда", "чем", "чего", "чтобы", "либо", "лишь", "даже", "ведь", "ещe", "have", "with", "from", "this", "that", "what", "when", "where", "which", "then", "than", "into", "your", "you", "for", "the", "and", "but", "not",
+  "без", "был", "была", "были", "быть", "вам", "вас", "вот", "все", "всё", "где", "для", "его", "если", "есть", "ещё", "или", "как", "когда", "который", "меня", "мне", "можно", "мой", "надо", "нет", "они", "она", "оно", "под", "при", "просто", "про", "раз", "так", "там", "тебя", "тоже", "только", "тут", "уже", "хочу", "что", "это", "этот", "эта", "эти", "очень", "сейчас", "потом", "после", "перед", "через", "пока", "кто", "куда", "какой", "какая", "какие", "почему", "зачем", "будет", "может", "нужно", "нужен", "нужна", "себя", "свой", "свои", "такой", "такая", "такие", "того", "тому", "тогда", "чем", "чего", "чтобы", "либо", "лишь", "даже", "ведь", "have", "with", "from", "this", "that", "what", "when", "where", "which", "then", "than", "into", "your", "you", "for", "the", "and", "but", "not",
+  "qidi", "q2", "q1", "box", "abs", "asa", "pla", "petg", "tpu", "pa6", "pa12", "pc", "pps", "cf", "gf",
+  "принтер", "печать", "пластик", "филамент", "катушка", "температура", "проблема", "вопрос", "подскажите",
 ]);
-
-const SHORT_TECH_TOKENS = new Set([
-  "q2", "q1", "abs", "asa", "pla", "petg", "tpu", "pa6", "pa12", "pc", "pps", "cf", "gf", "box",
-]);
+const SHORT_TECH_TOKENS = new Set(["pid", "mcu", "cfg", "kamp", "rfid", "ptfe"]);
 
 const TOPICS: Array<[string, RegExp]> = [
   ["qidi-box", /(qidi\s*box|qidi-box|gd[- ]?box|бокс|ams|rfid|смотк|бесконечн.{0,8}катуш|ptfe.{0,20}box)/iu],
@@ -29,7 +31,6 @@ const TOPICS: Array<[string, RegExp]> = [
 export function detectTopics(text: string): string[] {
   return TOPICS.filter(([, pattern]) => pattern.test(text)).map(([topic]) => topic);
 }
-
 export function classifyTopic(text: string): string {
   return detectTopics(text)[0] ?? "general";
 }
@@ -48,6 +49,25 @@ export function technicalScore(message: NormalizedMessage): number {
   return score;
 }
 
+export function knowledgeValue(message: NormalizedMessage): number {
+  if (isMediaOnly(message)) return 0;
+  let value = 0;
+  const score = technicalScore(message);
+  if (score >= 3) value += 0.35;
+  else if (score > 0) value += 0.15;
+  if (/\d{2,3}\s*°?c|\d+(?:[.,]\d+)?\s*(?:мм|mm|мм\/с|mm\/s|hz|гц|%)/iu.test(message.text)) value += 0.15;
+  if (/(помогло|не помогло|решил|причина|исправил|заменил|проверил|результат|настройк|параметр|попробуй|поставь|подними|опусти)/iu.test(message.text)) value += 0.25;
+  if (QUESTION.test(message.text)) value += 0.08;
+  if (message.text.length >= 80) value += 0.1;
+  const entities = extractEntities(message.text);
+  if (entities.materials.length || entities.printers.length || entities.components.length || entities.brands.length) value += 0.12;
+  return Number(Math.min(1, value).toFixed(2));
+}
+
+export function isMediaOnly(message: NormalizedMessage): boolean {
+  return message.hasMedia && /^\[Вложение:[^\]]+\]$/u.test(message.text.trim());
+}
+
 export function removalReason(message: NormalizedMessage): string | null {
   if (message.type !== "message") return "service-message";
   if (!message.text) return message.hasMedia ? "media-without-caption" : "empty";
@@ -58,6 +78,12 @@ export function removalReason(message: NormalizedMessage): string | null {
   return null;
 }
 
+function keywordStem(token: string): string {
+  if (!/[а-я]/u.test(token) || token.length < 6) return token;
+  const stemmed = token.replace(/(?:иями|ями|ами|ого|ему|ому|ыми|ими|ется|ются|лась|лся|ать|ять|ить|ов|ев|ам|ям|ах|ях|ом|ем|ый|ий|ая|ое|ые|ую|юю|а|я|ы|и|е|у|ю)$/u, "");
+  return stemmed.length >= 4 ? stemmed : token;
+}
+
 export function extractKeywords(text: string): Set<string> {
   const normalized = text.toLowerCase().replace(/ё/g, "е").replace(/https?:\/\/\S+/giu, " ");
   const rawTokens = normalized.match(/[a-zа-я0-9][a-zа-я0-9+._-]*/giu) ?? [];
@@ -65,7 +91,9 @@ export function extractKeywords(text: string): Set<string> {
   for (const token of rawTokens) {
     const clean = token.replace(/^[._+-]+|[._+-]+$/g, "");
     if (!clean || STOP_WORDS.has(clean)) continue;
-    if (clean.length >= 4 || SHORT_TECH_TOKENS.has(clean) || /\d/.test(clean)) tokens.add(clean);
+    const stem = keywordStem(clean);
+    if (!stem || STOP_WORDS.has(stem)) continue;
+    if (stem.length >= 4 || SHORT_TECH_TOKENS.has(stem) || /\d/.test(stem)) tokens.add(stem);
   }
   return tokens;
 }
