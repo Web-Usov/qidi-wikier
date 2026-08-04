@@ -1,12 +1,12 @@
 {
   "name": "qidi-wikier",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Pipeline for converting QIDI Telegram exports into a curated knowledge base.",
   "scripts": {
     "ingest": "node --experimental-strip-types src/cli.ts",
-    "check": "node --experimental-strip-types --check src/*.ts && node --experimental-strip-types --check test/*.test.ts",
+    "check": "node scripts/check.mjs",
     "test": "node --experimental-strip-types --test test/*.test.ts"
   },
   "engines": {
