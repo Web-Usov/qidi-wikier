@@ -158,7 +158,7 @@ function entitySignals(current: EntityProfile, previous: EntityProfile): EntityS
   }
 
   const conflicts = entityProfilesConflict(current, previous);
-  for (const conflict of conflicts) score -= conflict.startsWith("разные материалы") ? 1.5 : 0.75;
+  for (const conflict of conflicts) score -= conflict.includes("материал") ? 1.5 : 0.75;
   return {
     score,
     reasons,
@@ -208,7 +208,7 @@ function scoreCandidate(
   }
 
   const entityResult = entitySignals(extractEntities(current.text), extractEntities(previous.text));
-  if (entityResult.conflicts.some((conflict) => conflict.startsWith("разные принтеры"))) return null;
+  if (entityResult.conflicts.some((conflict) => conflict.startsWith("разные принтеры") || conflict.startsWith("разные основные материалы"))) return null;
   score += entityResult.score;
   reasons.push(...entityResult.reasons);
 
