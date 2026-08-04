@@ -23,7 +23,7 @@
 - Node.js 22.6 или новее;
 - исходные Telegram JSON на локальном диске.
 
-Внешние npm-зависимости не используются.
+Внешние npm-зависимости не используются, поэтому `npm install` для запуска текущей версии не обязателен.
 
 ## Быстрый старт
 
@@ -31,7 +31,7 @@
 mkdir -p sources prepared
 cp /путь/к/qidi_general_chat.json ./sources/
 
-npm run prepare -- \
+npm run ingest -- \
   --input ./sources/qidi_general_chat.json \
   --output ./prepared/general \
   --source-name qidi_general_chat
