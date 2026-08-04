@@ -7,9 +7,12 @@ const MARKET = /(продам|куплю|обменяю|барахолк|дос�
 const TECHNICAL = /(qidi|ку2|q2|q1|plus\s*4|принтер|печать|сло[йя]|сопл|экстру|филамент|пластик|pla|petg|abs|asa|tpu|pa\d*|нейлон|карбон|стекловолок|gf\d*|cf\d*|температур|стол|камер|вентилятор|обдув|ретракт|pressure\s*advance|input\s*shap|рем[её]н|шкив|воблинг|резонанс|калибров|прошив|klipper|orca|g-?code|ошибк|qde\d+|box|бокс|сушк|катушк|ptfe|хотэнд|термистор|нагрев|адгези|усадк|мост|нависан|подач|пробк|засор|mesh|z[- ]?offset)/iu;
 
 export const QUESTION = /\?|^(?:кто|как|почему|зачем|что|где|куда|какой|какая|какие|можно ли|есть ли|подскажите|подскажите пожалуйста)(?:\s|$)/iu;
+const QUESTION_PHRASE = /(?:^|[\s,.;:!?—-])(?:кто(?:-нибудь)?|как|почему|зачем|что|где|куда|какой|какая|какие|можно ли|есть ли|подскажите(?: пожалуйста)?|кто знает|может кто|нужен совет|нужна помощь|куда копать|что делать|есть идеи)(?:\s|$)/iu;
 export const STRONG_CONTINUATION = /^(?:проверил|проверила|заменил|заменила|настроил|настроила|поднял|подняла|опустил|опустила|сделал как|сделала как|после этого|в итоге|результат|помогло|не помогло|исправил|исправила|перепечатал|перепечатала)(?:\s|[:,.!-]|$)/iu;
 export const WEAK_CONTINUATION = /^(?:а|и|но|да|нет|я|он|она|они|это|там|тут|ещ[её])(?:\s|[,.:;!?-]|$)/iu;
 export const TOPIC_SHIFT = /^(?:кстати|к слову|другая тема|оффтоп)(?:\s|[,.:;!?-]|$)/iu;
+export const ACTION_ANSWER = /(попробуй|поставь|использ|мажу|печатаю|печатал|делал|делала|суши|сушить|открой|закрой|подними|снизь|выключи|включи|нужно|надо|лучше|можно|стоит|помогло|не помогло|держит|прилип|отлип)/iu;
+export const DEFINITION_QUESTION = /(что такое|что значит|означает|получается|это\s+[^?]{1,60}\?)/iu;
 
 const STOP_WORDS = new Set([
   "без", "был", "была", "были", "быть", "вам", "вас", "вот", "все", "всё", "где", "для", "его", "если", "есть", "ещё", "или", "как", "когда", "который", "меня", "мне", "можно", "мой", "надо", "нет", "они", "она", "оно", "под", "при", "просто", "про", "раз", "так", "там", "тебя", "тоже", "только", "тут", "уже", "хочу", "что", "это", "этот", "эта", "эти", "очень", "сейчас", "потом", "после", "перед", "через", "пока", "кто", "куда", "какой", "какая", "какие", "почему", "зачем", "будет", "может", "нужно", "нужен", "нужна", "себя", "свой", "свои", "такой", "такая", "такие", "того", "тому", "тогда", "чем", "чего", "чтобы", "либо", "лишь", "даже", "ведь", "have", "with", "from", "this", "that", "what", "when", "where", "which", "then", "than", "into", "your", "you", "for", "the", "and", "but", "not",
@@ -35,6 +38,37 @@ export function classifyTopic(text: string): string {
   return detectTopics(text)[0] ?? "general";
 }
 
+export function isQuestionLike(text: string): boolean {
+  const head = text.trim().slice(0, 600);
+  return QUESTION.test(head) || QUESTION_PHRASE.test(head);
+}
+
+function normalizedComparableText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/https?:\/\/\S+/giu, " ")
+    .replace(/\[вложение:[^\]]+\]/giu, " ")
+    .replace(/[^a-zа-я0-9]+/giu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isNearDuplicateText(a: string, b: string): boolean {
+  const left = normalizedComparableText(a);
+  const right = normalizedComparableText(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const leftTokens = new Set(left.split(" ").filter((token) => token.length >= 3));
+  const rightTokens = new Set(right.split(" ").filter((token) => token.length >= 3));
+  if (leftTokens.size < 6 || rightTokens.size < 6) return false;
+  let shared = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) shared += 1;
+  const containment = shared / Math.min(leftTokens.size, rightTokens.size);
+  const jaccard = shared / (leftTokens.size + rightTokens.size - shared);
+  return containment >= 0.82 && jaccard >= 0.42;
+}
+
 export function technicalScore(message: NormalizedMessage): number {
   let score = 0;
   const text = message.text;
@@ -57,7 +91,7 @@ export function knowledgeValue(message: NormalizedMessage): number {
   else if (score > 0) value += 0.15;
   if (/\d{2,3}\s*°?c|\d+(?:[.,]\d+)?\s*(?:мм|mm|мм\/с|mm\/s|hz|гц|%)/iu.test(message.text)) value += 0.15;
   if (/(помогло|не помогло|решил|причина|исправил|заменил|проверил|результат|настройк|параметр|попробуй|поставь|подними|опусти)/iu.test(message.text)) value += 0.25;
-  if (QUESTION.test(message.text)) value += 0.08;
+  if (isQuestionLike(message.text)) value += 0.08;
   if (message.text.length >= 80) value += 0.1;
   const entities = extractEntities(message.text);
   if (entities.materials.length || entities.printers.length || entities.components.length || entities.brands.length) value += 0.12;
