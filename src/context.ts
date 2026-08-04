@@ -1,11 +1,14 @@
 import {
-  QUESTION,
+  ACTION_ANSWER,
+  DEFINITION_QUESTION,
   STRONG_CONTINUATION,
   TOPIC_SHIFT,
   WEAK_CONTINUATION,
   detectTopics,
   extractKeywords,
   isMediaOnly,
+  isNearDuplicateText,
+  isQuestionLike,
   knowledgeValue,
   sharedKeywordCount,
   technicalScore,
@@ -48,6 +51,7 @@ export interface ThreadDraft {
 export interface ContextGraphDiagnostics {
   consideredRoots: number;
   rejectedMediaOnly: number;
+  rejectedDuplicate: number;
   rejectedNoSemanticAnchor: number;
   rejectedBelowThreshold: number;
   rejectedAmbiguous: number;
@@ -65,6 +69,16 @@ interface CandidateScore {
   sharedEntities: Record<string, string[]>;
   target: ThreadDraft;
   targetMessage: NormalizedMessage;
+}
+
+interface EntitySignals {
+  score: number;
+  reasons: string[];
+  shared: Record<string, string[]>;
+  conflicts: string[];
+  materialAnchor: boolean;
+  strongSemanticAnchor: boolean;
+  genericAnchor: boolean;
 }
 
 export function detectTopicAnchors(messages: NormalizedMessage[]): Set<number> {
@@ -100,13 +114,7 @@ function sameAuthor(a: NormalizedMessage, b: NormalizedMessage): boolean {
   return a.author === b.author;
 }
 
-function entitySignals(current: EntityProfile, previous: EntityProfile): {
-  score: number;
-  reasons: string[];
-  shared: Record<string, string[]>;
-  conflicts: string[];
-  semanticAnchor: boolean;
-} {
+function entitySignals(current: EntityProfile, previous: EntityProfile): EntitySignals {
   let score = 0;
   const reasons: string[] = [];
   const shared: Record<string, string[]> = {};
@@ -156,7 +164,9 @@ function entitySignals(current: EntityProfile, previous: EntityProfile): {
     reasons,
     shared,
     conflicts,
-    semanticAnchor: exactMaterials.length > 0 || materialFamilies.length > 0 || strongComponents.length > 0 || brands.length > 0,
+    materialAnchor: exactMaterials.length > 0 || materialFamilies.length > 0,
+    strongSemanticAnchor: strongComponents.length > 0 || brands.length > 0,
+    genericAnchor: weakComponents.length > 0,
   };
 }
 
@@ -171,6 +181,11 @@ function scoreCandidate(
   const authorMatches = sameAuthor(current, previous);
   const maxWindow = (authorMatches ? options.sameAuthorWindowMinutes : options.contextWindowMinutes) * 60;
   if (gapSeconds > maxWindow) return null;
+
+  const currentQuestion = isQuestionLike(current.text);
+  const previousQuestion = isQuestionLike(previous.text);
+  if (previousQuestion && currentQuestion && !authorMatches) return null;
+  if (authorMatches && isNearDuplicateText(current.text, previous.text)) return null;
 
   let score = 0;
   const reasons: string[] = [];
@@ -193,6 +208,7 @@ function scoreCandidate(
   }
 
   const entityResult = entitySignals(extractEntities(current.text), extractEntities(previous.text));
+  if (entityResult.conflicts.some((conflict) => conflict.startsWith("разные принтеры"))) return null;
   score += entityResult.score;
   reasons.push(...entityResult.reasons);
 
@@ -218,10 +234,26 @@ function scoreCandidate(
     reasons.push(`общая широкая тема: ${sharedTopics.join(", ")}`);
   }
 
-  if (QUESTION.test(previous.text) && QUESTION.test(current.text) && !authorMatches) return null;
   const strongContinuation = STRONG_CONTINUATION.test(current.text);
   const weakContinuation = WEAK_CONTINUATION.test(current.text);
-  const directQuestionAnswer = QUESTION.test(previous.text) && !QUESTION.test(current.text) && (entityResult.semanticAnchor || sharedKeywords >= 2);
+  const actionAnswer = ACTION_ANSWER.test(current.text);
+  const definitionAnswer = DEFINITION_QUESTION.test(previous.text) && entityResult.materialAnchor && current.text.length <= 100;
+  const materialAnswer = entityResult.materialAnchor && (
+    sharedKeywords >= 2 || entityResult.genericAnchor || actionAnswer || definitionAnswer
+  );
+  const directQuestionAnswer = previousQuestion && !currentQuestion && (
+    entityResult.strongSemanticAnchor || materialAnswer || sharedKeywords >= 3
+  );
+
+  if (currentQuestion && !previousQuestion && !authorMatches && !entityResult.strongSemanticAnchor && sharedKeywords < 2) return null;
+  if (!authorMatches) {
+    const crossAuthorAnchor = entityResult.strongSemanticAnchor || sharedKeywords >= 3 || directQuestionAnswer;
+    if (!crossAuthorAnchor) return null;
+  }
+  if (authorMatches && gapSeconds > options.contextWindowMinutes * 60 && !strongContinuation && !entityResult.strongSemanticAnchor && sharedKeywords < 2) {
+    return null;
+  }
+
   if (directQuestionAnswer) {
     score += 1.25;
     reasons.push("семантически связанный ответ на вопрос");
@@ -238,7 +270,9 @@ function scoreCandidate(
     reasons.push("возможная смена темы");
   }
 
-  const semanticAnchor = entityResult.semanticAnchor || sharedKeywords >= 2;
+  const semanticAnchor = entityResult.strongSemanticAnchor || sharedKeywords >= 2 || (
+    entityResult.materialAnchor && (authorMatches || actionAnswer || entityResult.genericAnchor || definitionAnswer)
+  );
   const sameAuthorContinuation = authorMatches && strongContinuation && gapSeconds <= 600;
   if (!semanticAnchor && !directQuestionAnswer && !sameAuthorContinuation) return null;
 
@@ -273,6 +307,7 @@ export function inferContextGraph(
   const diagnostics: ContextGraphDiagnostics = {
     consideredRoots: roots.length,
     rejectedMediaOnly: 0,
+    rejectedDuplicate: 0,
     rejectedNoSemanticAnchor: 0,
     rejectedBelowThreshold: 0,
     rejectedAmbiguous: 0,
@@ -287,6 +322,22 @@ export function inferContextGraph(
       diagnostics.rejectedMediaOnly += 1;
       continue;
     }
+
+    let duplicateFound = false;
+    for (let targetIndex = sourceIndex - 1; targetIndex >= 0; targetIndex -= 1) {
+      const previous = roots[targetIndex]!.messages[0]!;
+      const gap = current.unixTime - previous.unixTime;
+      if (gap > 180) break;
+      if (sameAuthor(current, previous) && isNearDuplicateText(current.text, previous.text)) {
+        duplicateFound = true;
+        break;
+      }
+    }
+    if (duplicateFound) {
+      diagnostics.rejectedDuplicate += 1;
+      continue;
+    }
+
     const scored: CandidateScore[] = [];
     let hadWindowCandidate = false;
     for (let targetIndex = sourceIndex - 1; targetIndex >= 0; targetIndex -= 1) {
