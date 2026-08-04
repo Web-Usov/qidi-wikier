@@ -1,4 +1,5 @@
-import type { InferredLink } from "./context.ts";
+import type { ContextEdge } from "./context.ts";
+import type { EntityProfile } from "./entities.ts";
 import type { NormalizedMessage } from "./telegram.ts";
 
 export interface Thread {
@@ -8,18 +9,18 @@ export interface Thread {
   title: string;
   messages: NormalizedMessage[];
   score: number;
-  inferredLinks: InferredLink[];
+  knowledgeValue: number;
+  contextEdges: ContextEdge[];
 }
 
-export interface ContextLinkReviewRecord {
-  threadId: string;
+export interface ContextLinkReviewRecord extends ContextEdge {
+  sourceThreadId: string;
+  targetThreadId: string;
   topic: string;
-  messageId: number;
-  linkedTo: number;
-  score: number;
-  reasons: string[];
   previousText: string;
   currentText: string;
+  previousEntities: EntityProfile;
+  currentEntities: EntityProfile;
 }
 
 export function threadTitle(messages: NormalizedMessage[]): string {
@@ -31,7 +32,6 @@ export function renderThread(thread: Thread, sourceName: string, topicAnchors: S
   const dates = thread.messages.map((message) => message.date).filter(Boolean);
   const start = dates[0] ?? "неизвестно";
   const end = dates.at(-1) ?? start;
-  const inferredByMessage = new Map(thread.inferredLinks.map((link) => [link.messageId, link]));
   const lines = [
     `## ${thread.id} — ${thread.title}`,
     "",
@@ -40,52 +40,78 @@ export function renderThread(thread: Thread, sourceName: string, topicAnchors: S
     `- Период: ${start}${end !== start ? ` — ${end}` : ""}`,
     `- Сообщения: ${thread.messages.map((message) => message.id).join(", ")}`,
     `- Технический балл: ${thread.score}`,
-    `- Контекстных связей: ${thread.inferredLinks.length}`,
+    `- Ценность для базы: ${thread.knowledgeValue}`,
+    `- Предположительных внешних связей: ${thread.contextEdges.length}`,
     "",
-    "### Цепочка",
+    "### Точная цепочка Telegram",
     "",
   ];
   for (const message of thread.messages) {
-    const inferred = inferredByMessage.get(message.id);
-    const relation = inferred
-      ? `, контекстно связано с ${inferred.linkedTo} (балл ${inferred.score})`
-      : message.replyTo && topicAnchors.has(message.replyTo)
-        ? ", сообщение в топике"
-        : message.replyTo
-          ? `, ответ на ${message.replyTo}`
-          : "";
+    const relation = message.replyTo && topicAnchors.has(message.replyTo)
+      ? ", сообщение в топике"
+      : message.replyTo
+        ? `, ответ на ${message.replyTo}`
+        : "";
     lines.push(`**[${message.id}] ${message.author}** — ${message.date || "без даты"}${relation}`, "", message.text.trim(), "");
-    if (inferred) lines.push(`_Причины связи: ${inferred.reasons.join("; ")}._`, "");
+  }
+  if (thread.contextEdges.length) {
+    lines.push("### Предположительные связи с другими цепочками", "");
+    for (const edge of thread.contextEdges) {
+      lines.push(
+        `- [${edge.messageId}] → [${edge.linkedTo}], уверенность: **${edge.confidence}**, балл: ${edge.score}, отрыв от второго кандидата: ${edge.scoreMargin ?? "нет второго кандидата"}.`,
+        `  Причины: ${edge.reasons.join("; ")}.`,
+      );
+      if (edge.conflicts.length) lines.push(`  Конфликты: ${edge.conflicts.join("; ")}.`);
+    }
+    lines.push("");
   }
   return `${lines.join("\n")}\n`;
 }
 
-export function renderContextReview(records: ContextLinkReviewRecord[], sourceName: string): string {
+function renderRecord(record: ContextLinkReviewRecord): string[] {
+  return [
+    `## ${record.sourceThreadId}: ${record.linkedTo} → ${record.messageId}`,
+    "",
+    `- Целевая цепочка: \`${record.targetThreadId}\``,
+    `- Тема источника: \`${record.topic}\``,
+    `- Балл: ${record.score}`,
+    `- Уверенность: \`${record.confidence}\``,
+    `- Отрыв от второго кандидата: ${record.scoreMargin ?? "нет второго кандидата"}`,
+    `- Ценность сообщений: ${record.targetKnowledgeValue} → ${record.sourceKnowledgeValue}`,
+    `- Общие сущности: ${Object.entries(record.sharedEntities).map(([kind, values]) => `${kind}=${values.join("/")}`).join("; ") || "нет"}`,
+    `- Конфликты: ${record.conflicts.join("; ") || "нет"}`,
+    `- Причины: ${record.reasons.join("; ")}`,
+    "",
+    `**Предыдущее сообщение [${record.linkedTo}]**`,
+    "",
+    record.previousText,
+    "",
+    `**Предположительно связанное сообщение [${record.messageId}]**`,
+    "",
+    record.currentText,
+    "",
+  ];
+}
+
+export function renderContextReview(
+  records: ContextLinkReviewRecord[],
+  sourceName: string,
+  totals: Record<ContextEdge["confidence"], number>,
+): string {
   const lines = [
-    "# Проверка контекстных связей",
+    "# Стратифицированная проверка контекстных связей",
     "",
     `Источник: \`${sourceName}\``,
     "",
-    "> В выборку попадают связи с наименьшим эвристическим баллом. Их нужно проверить в первую очередь: ошибочную связь следует исправлять настройками алгоритма, а не вручную в итоговом Markdown.",
+    `Всего связей: low=${totals.low}, medium=${totals.medium}, high=${totals.high}.`,
+    "",
+    "> Предположительные связи не склеивают Telegram-цепочки и не влияют на последующие решения алгоритма. Выборка распределена по уровням уверенности.",
     "",
   ];
-  for (const record of records) {
-    lines.push(
-      `## ${record.threadId}: ${record.linkedTo} → ${record.messageId}`,
-      "",
-      `- Тема: \`${record.topic}\``,
-      `- Балл: ${record.score}`,
-      `- Причины: ${record.reasons.join("; ")}`,
-      "",
-      `**Предыдущее сообщение [${record.linkedTo}]**`,
-      "",
-      record.previousText,
-      "",
-      `**Присоединённое сообщение [${record.messageId}]**`,
-      "",
-      record.currentText,
-      "",
-    );
+  for (const confidence of ["low", "medium", "high"] as const) {
+    const band = records.filter((record) => record.confidence === confidence);
+    lines.push(`# Уровень ${confidence}`, "", `В выборке: ${band.length}.`, "");
+    for (const record of band) lines.push(...renderRecord(record));
   }
   return `${lines.join("\n")}\n`;
 }
@@ -97,7 +123,7 @@ export function renderChunkHeader(sourceName: string, index: number): string {
     `Источник: \`${sourceName}\`  `,
     `Часть: ${String(index).padStart(3, "0")}`,
     "",
-    "> Это слой доказательств, а не готовая энциклопедия. Сообщения очищены от очевидного шума. Связи без Telegram reply помечены как контекстные и требуют последующей редакторской проверки.",
+    "> Внутри разделов находятся только точные Telegram reply-цепочки. Эвристические связи вынесены в отдельный граф и перечислены как метаданные, но не объединяют тексты.",
     "",
   ].join("\n");
 }
