@@ -35,11 +35,12 @@ test("keeps inferred relations as non-transitive graph edges", async () => {
     message(10, 10, "Alex", "Печатаю ABS на QIDI Q2, слои расходятся. Температура сопла 250 C?"),
     message(11, 50, "Boris", "Попробуй поднять температуру ABS до 265 C: межслойная прочность должна стать лучше."),
     message(12, 100, "Alex", "Поднял температуру ABS до 265 C, помогло: межслойная прочность стала лучше."),
-    message(20, 1800, "Seller", "Объявление о продаже катушки через маркетплейс."),
+    message(20, 1800, "Seller", "Продам катушку через Авито."),
     message(30, 4000, "Clara", "Как настроить сушку QIDI BOX для PETG?"),
   ]);
   assert.equal(statistics.exactThreads, 4);
   assert.equal(statistics.inferredContextLinks, 2);
+  assert.equal(statistics.removalCounts["marketplace-or-sale"], 1);
   assert.deepEqual(statistics.detectedTopicAnchors, [1]);
   const graph = (await readFile(join(output, "review", "context_graph.jsonl"), "utf8")).trim().split("\n").map(JSON.parse);
   assert.deepEqual(graph.map((edge) => [edge.linkedTo, edge.messageId]), [[10, 11], [10, 12]]);
