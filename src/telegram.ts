@@ -17,6 +17,8 @@ export interface TelegramMessageRaw {
   file?: string;
   forwarded_from?: string;
   reactions?: Array<{ count?: number }>;
+  action?: string;
+  title?: string;
 }
 
 export interface NormalizedMessage {
