@@ -69,10 +69,12 @@ test("accepts entity-grounded direct answers", async () => {
     message(201, 30, "Boris", "Nylon — PA6."),
     message(210, 1000, "Alex", "Деталь из ABS легко разрушается по шву после печати. Что сделать?"),
     message(211, 1040, "Boris", "Перенеси шов на угол и проверь температуру ABS."),
+    message(220, 2000, "Alex", "PETG намертво прилип к столу. Как потом снимать?"),
+    message(221, 2030, "Boris", "Для PETG используй клей как разделительный слой, чтобы деталь потом отлипла."),
   ]);
-  assert.equal(statistics.inferredContextLinks, 2);
+  assert.equal(statistics.inferredContextLinks, 3);
   const graph = (await readFile(join(output, "review", "context_graph.jsonl"), "utf8")).trim().split("\n").map(JSON.parse);
-  assert.deepEqual(graph.map((edge) => [edge.linkedTo, edge.messageId]).sort((a, b) => a[0] - b[0]), [[200, 201], [210, 211]]);
+  assert.deepEqual(graph.map((edge) => [edge.linkedTo, edge.messageId]).sort((a, b) => a[0] - b[0]), [[200, 201], [210, 211], [220, 221]]);
 });
 
 test("rejects ambiguous candidates", async () => {
@@ -83,4 +85,24 @@ test("rejects ambiguous candidates", async () => {
   ]);
   assert.equal(statistics.inferredContextLinks, 0);
   assert.equal(statistics.contextGraphDiagnostics.rejectedAmbiguous, 1);
+});
+
+test("rejects printer conflicts and adjacent questions from different authors", async () => {
+  const { statistics } = await runFixture([
+    message(400, 10, "Alex", "Как настроить OPY на QIDI X-Max 3, если деталь отлипает при обдуве?"),
+    message(401, 20, "Alex", "Печатаю PA66 OPY на QIDI Q1 Pro, камера 60 C и стол 100 C."),
+    message(410, 100, "Boris", "Кто знает, почему Elegoo Rapid PETG даёт дырки в стенке?"),
+    message(411, 120, "Clara", "Нужен совет: как напечатать образцы из PETG без артефактов?"),
+  ]);
+  assert.equal(statistics.inferredContextLinks, 0);
+});
+
+test("suppresses repeated top-level posts from the same author", async () => {
+  const repeated = "Принтер QIDI Q1 Pro. Печатаю сферу PLA фирмы NIT. Почему в начале печати появляются дефекты, а дальше сфера нормальная?";
+  const { statistics } = await runFixture([
+    message(500, 10, "Alex", repeated),
+    message(501, 20, "Alex", repeated),
+  ]);
+  assert.equal(statistics.inferredContextLinks, 0);
+  assert.equal(statistics.contextGraphDiagnostics.rejectedDuplicate, 1);
 });
