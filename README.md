@@ -1,3 +1,67 @@
 # QIDI Wikier
 
-Repository initialized. The implementation is prepared in a separate branch and will be reviewed through a pull request.
+Инструменты и структура для превращения Telegram-чатов о QIDI Q2, QIDI BOX и филаментах в проверяемую базу знаний.
+
+## Что уже есть
+
+- потоковое чтение больших Telegram JSON;
+- нормализация сложного поля `text` из экспорта Telegram Desktop;
+- удаление очевидного флуда и сервисных сообщений;
+- восстановление цепочек через `reply_to_message_id`;
+- обнаружение служебных ID Telegram-топиков;
+- первичная тематическая классификация;
+- разбиение результата на цельные Markdown-пакеты;
+- карантин сомнительных сообщений;
+- статистика и подробный отчёт об удалении;
+- схема будущих карточек знаний и доказательств.
+
+## Требования
+
+- Node.js 22.6 или новее;
+- исходные Telegram JSON на локальном диске.
+
+Внешние npm-зависимости в первой версии не используются.
+
+## Быстрый старт
+
+```bash
+mkdir -p sources prepared
+cp /путь/к/qidi_general_chat.json ./sources/
+
+npm run prepare -- \
+  --input ./sources/qidi_general_chat.json \
+  --output ./prepared/general \
+  --source-name qidi_general_chat
+```
+
+Результат:
+
+```text
+prepared/general/
+├── manifest.json
+├── statistics.json
+├── chunks/
+│   ├── qidi_general_chat_001.md
+│   └── ...
+├── quarantine/
+│   └── uncertain_messages.jsonl
+└── skipped/
+    └── removal_report.json
+```
+
+По умолчанию размер одного Markdown-пакета ограничен примерно 600 000 символов. Граница никогда не разрывает отдельную цепочку обсуждения.
+
+## Проверка проекта
+
+```bash
+npm run check
+```
+
+## Важные ограничения первой версии
+
+- Фильтрация намеренно консервативна и не определяет истинность советов.
+- Сообщения без reply-связи пока не объединяются в широкие временные диалоги.
+- Вложения не анализируются, если сами файлы не были выгружены.
+- Подготовленные пакеты являются слоем доказательств, а не готовой энциклопедией.
+
+Подробности: [архитектура](docs/ARCHITECTURE.md) и [схема знаний](docs/KNOWLEDGE_SCHEMA.md).
