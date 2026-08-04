@@ -3,11 +3,11 @@ import type { NormalizedMessage } from "./telegram.ts";
 
 const ACKNOWLEDGEMENT = /^(спасибо|благодарю|понял|ясно|ок(?:ей)?|ага|угу|да|нет|точно|согласен|круто|класс|норм|плюсую|жд[её]м|доброе утро|добрый вечер|привет)[!.,… )]*(?:\p{Extended_Pictographic})*$/iu;
 const ONLY_NOISE = /^[\s\p{P}\p{S}\p{Extended_Pictographic}]+$/u;
-const MARKET = /(продам|куплю|обменяю|барахолк|доставка|авито|озон|wildberries|(?:^|\s)вб(?:\s|$)|скидк|промокод)/iu;
+const MARKET = /(продам|куплю|обменяю|барахолк|доставка|авито|(?:ozon(?:\.ru)?|озон)|wildberries|wb\.ru|(?:^|\s)вб(?:\s|$)|ali(?:express)?|aliexpress|яндекс.{0,8}маркет|market\.yandex|скидк|промокод|за\s*\d[\d\s]*(?:₽|руб))/iu;
 const TECHNICAL = /(qidi|ку2|q2|q1|plus\s*4|принтер|печать|сло[йя]|сопл|экстру|филамент|пластик|pla|petg|abs|asa|tpu|pa\d*|нейлон|карбон|стекловолок|gf\d*|cf\d*|температур|стол|камер|вентилятор|обдув|ретракт|pressure\s*advance|input\s*shap|рем[её]н|шкив|воблинг|резонанс|калибров|прошив|klipper|orca|g-?code|ошибк|qde\d+|box|бокс|сушк|катушк|ptfe|хотэнд|термистор|нагрев|адгези|усадк|мост|нависан|подач|пробк|засор|mesh|z[- ]?offset)/iu;
 
 export const QUESTION = /\?|^(?:кто|как|почему|зачем|что|где|куда|какой|какая|какие|можно ли|есть ли|подскажите|подскажите пожалуйста)(?:\s|$)/iu;
-const QUESTION_PHRASE = /^(?:(?:всем привет|привет|добрый день|добрый вечер|доброго дня|доброго вечера|ребят[аы]?|парни|коллеги|народ|гуру|мужики)[!,.?:;\s—-]*)?(?:кто(?:-нибудь)?|как|почему|зачем|что|где|куда|какой|какая|какие|можно ли|есть ли|подскажите(?: пожалуйста)?|кто знает|может кто|нужен совет|нужна помощь|куда копать|что делать|есть идеи)(?:\s|$)/iu;
+const QUESTION_PHRASE = /^(?:(?:всем привет|всех приветствую|привет|добрый день|добрый вечер|доброго дня|доброго вечера|ребят[аы]?|парни|коллеги|народ|гуру|мужики)[!,.?:;\s—-]*)?(?:кто(?:-нибудь)?|как|почему|зачем|что|где|куда|какой|какая|какие|можно ли|есть ли|подскажите(?: пожалуйста)?|кто знает|может кто|нужен совет|нужна помощь|куда копать|что делать|есть идеи)(?:\s|$)/iu;
 export const STRONG_CONTINUATION = /^(?:проверил|проверила|заменил|заменила|настроил|настроила|поднял|подняла|опустил|опустила|сделал как|сделала как|после этого|в итоге|результат|помогло|не помогло|исправил|исправила|перепечатал|перепечатала)(?:\s|[:,.!-]|$)/iu;
 export const WEAK_CONTINUATION = /^(?:а|и|но|да|нет|я|он|она|они|это|там|тут|ещ[её])(?:\s|[,.:;!?-]|$)/iu;
 export const TOPIC_SHIFT = /^(?:кстати|к слову|другая тема|оффтоп)(?:\s|[,.:;!?-]|$)/iu;
@@ -61,12 +61,14 @@ export function isNearDuplicateText(a: string, b: string): boolean {
   if (left === right) return true;
   const leftTokens = new Set(left.split(" ").filter((token) => token.length >= 3));
   const rightTokens = new Set(right.split(" ").filter((token) => token.length >= 3));
-  if (leftTokens.size < 6 || rightTokens.size < 6) return false;
+  const minSize = Math.min(leftTokens.size, rightTokens.size);
+  if (minSize < 4) return false;
   let shared = 0;
   for (const token of leftTokens) if (rightTokens.has(token)) shared += 1;
-  const containment = shared / Math.min(leftTokens.size, rightTokens.size);
+  const containment = shared / minSize;
   const jaccard = shared / (leftTokens.size + rightTokens.size - shared);
-  return containment >= 0.82 && jaccard >= 0.42;
+  if (containment >= 0.8 && jaccard >= 0.4) return true;
+  return isQuestionLike(a) && isQuestionLike(b) && containment >= 0.65 && jaccard >= 0.3;
 }
 
 export function technicalScore(message: NormalizedMessage): number {
