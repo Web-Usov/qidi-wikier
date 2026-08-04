@@ -15,7 +15,7 @@ interface CliOptions {
 
 function usage(): string {
   return `Usage:
-  npm run prepare -- --input <telegram.json> --output <directory> [options]
+  npm run ingest -- --input <telegram.json> --output <directory> [options]
 
 Options:
   --source-name <name>                 Stable source identifier (default: input filename)
@@ -27,7 +27,7 @@ Options:
   --help                               Show this message
 
 Example:
-  npm run prepare -- \\
+  npm run ingest -- \\
     --input ./sources/qidi_general_chat.json \\
     --output ./prepared/general \\
     --source-name qidi_general_chat
