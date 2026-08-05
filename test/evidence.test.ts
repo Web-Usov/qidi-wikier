@@ -137,3 +137,68 @@ test("does not award C reliability to another author's anecdotal result", async 
   assert.ok(candidates[0].kinds.includes("answer"));
   assert.equal(candidates[0].provisionalReliability, "D");
 });
+
+test("recognizes Cyrillic outcome words with Unicode boundaries", async () => {
+  const { candidates } = await runFixture([
+    message(90, 10, "Alex", "Код ошибки QIDI BOX: https://wiki.qidi3d.com/en/QIDIBOX/qde-code"),
+    message(91, 20, "Alex", "Увы, инструкцию прочитал — не помогло", 90),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "ready");
+  assert.ok(candidates[0].kinds.includes("result"));
+  assert.ok(!candidates[0].flags.includes("external-reference-only"));
+});
+
+test("detects requests without a question mark and their practical answer", async () => {
+  const { candidates } = await runFixture([
+    message(100, 10, "Alex", "Кстати ребят, есть PPS-CF на сопле 0.6. Какие параметры ставить для оценки объёмного расхода"),
+    message(101, 20, "Boris", "Пробуйте диапазон 3-10 мм3/с с шагом 0.5", 100),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "ready");
+  assert.ok(candidates[0].kinds.includes("question"));
+  assert.ok(candidates[0].kinds.includes("answer"));
+});
+
+test("recognizes short nominal and Cyrillic hardness answers", async () => {
+  const manufacturer = await runFixture([
+    message(110, 10, "Alex", "Кто от какого производителя покупает PETG?"),
+    message(111, 20, "Boris", "Plastikoff", 110),
+  ]);
+  const hardness = await runFixture([
+    message(120, 10, "Alex", "Какой TPU взять для ножек на QIDI Q2?"),
+    message(121, 20, "Boris", "Д60", 120),
+  ]);
+
+  assert.equal(manufacturer.candidates[0].status, "ready");
+  assert.ok(manufacturer.candidates[0].kinds.includes("answer"));
+  assert.equal(hardness.candidates[0].status, "ready");
+  assert.ok(hardness.candidates[0].kinds.includes("answer"));
+});
+
+test("recognizes an answer to a later question in the same exact thread", async () => {
+  const { candidates } = await runFixture([
+    message(130, 10, "Alex", "Просто надо принять этот факт про инженерные пластики."),
+    message(131, 20, "Alex", "Так я пытаюсь разобраться, какой материал подобрать для детали при 110 C", 130),
+    message(132, 30, "Boris", "ABS/PC от Lider подойдёт лучше обычного ABS", 131),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "ready");
+  assert.ok(candidates[0].kinds.includes("question"));
+  assert.ok(candidates[0].kinds.includes("answer"));
+});
+
+test("suppresses media-first social exchanges without technical substance", async () => {
+  const media = message(140, 10, "Alex", "");
+  Object.assign(media, { file_name: "sticker.webp", mime_type: "image/webp" });
+  const { candidates } = await runFixture([
+    media,
+    message(141, 20, "Boris", "решил взять на пробу?", 140),
+    message(142, 30, "Alex", "Ноу", 141),
+  ]);
+
+  assert.equal(candidates.length, 0);
+});
