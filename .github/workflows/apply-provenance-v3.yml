@@ -1,0 +1,150 @@
+name: Apply evidence provenance schema
+
+on:
+  push:
+    branches:
+      - agent/bootstrap-qidi-wikier
+    paths:
+      - .github/workflows/apply-provenance-v3.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bootstrap-qidi-wikier
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Add full source provenance
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          evidence = Path('src/evidence.ts')
+          text = evidence.read_text(encoding='utf-8')
+
+          parameter_block = '''export interface EvidenceParameter {
+            kind: "temperature" | "speed" | "flow" | "dimension" | "percentage" | "duration" | "version";
+            value: string;
+            messageId: number;
+          }
+          '''.replace('          ', '')
+          provenance_block = parameter_block + '''
+          export interface EvidenceSourceMessage {
+            id: number;
+            author: string;
+            authorId: string;
+            date: string;
+            replyTo?: number;
+            text: string;
+            hasMedia: boolean;
+          }
+          '''.replace('          ', '')
+          if parameter_block not in text:
+              raise SystemExit('EvidenceParameter block not found')
+          text = text.replace(parameter_block, provenance_block, 1)
+
+          old_header = '''export interface EvidenceCandidate {
+            schemaVersion: 2;
+            id: string;
+          '''.replace('          ', '')
+          new_header = '''export interface EvidenceCandidate {
+            schemaVersion: 3;
+            id: string;
+            sourceName: string;
+          '''.replace('          ', '')
+          if old_header not in text:
+              raise SystemExit('EvidenceCandidate header not found')
+          text = text.replace(old_header, new_header, 1)
+
+          old_tail = '''  flags: string[];
+            sourceExcerpt: string;
+          }'''.replace('          ', '')
+          new_tail = '''  flags: string[];
+            sourceMessages: EvidenceSourceMessage[];
+            sourceExcerpt: string;
+          }'''.replace('          ', '')
+          if old_tail not in text:
+              raise SystemExit('EvidenceCandidate tail not found')
+          text = text.replace(old_tail, new_tail, 1)
+
+          old_signature = 'export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0.6): EvidenceCandidate[] {'
+          new_signature = 'export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0.6, sourceName = "unknown"): EvidenceCandidate[] {'
+          if old_signature not in text:
+              raise SystemExit('buildEvidenceCandidates signature not found')
+          text = text.replace(old_signature, new_signature, 1)
+
+          old_return = '''      schemaVersion: 2 as const,
+            id: `EVIDENCE-${thread.id.replace(/^THREAD-/, "")}`,
+          '''.replace('          ', '')
+          new_return = '''      schemaVersion: 3 as const,
+            id: `EVIDENCE-${thread.id.replace(/^THREAD-/, "")}`,
+            sourceName,
+          '''.replace('          ', '')
+          if old_return not in text:
+              raise SystemExit('candidate return header not found')
+          text = text.replace(old_return, new_return, 1)
+
+          old_excerpt = '''      flags,
+            sourceExcerpt: excerpt(thread),
+          '''.replace('          ', '')
+          new_excerpt = '''      flags,
+            sourceMessages: thread.messages.map((message) => ({
+              id: message.id,
+              author: message.author,
+              authorId: message.authorId,
+              date: message.date,
+              ...(message.replyTo === undefined ? {} : { replyTo: message.replyTo }),
+              text: message.text,
+              hasMedia: message.hasMedia,
+            })),
+            sourceExcerpt: excerpt(thread),
+          '''.replace('          ', '')
+          if old_excerpt not in text:
+              raise SystemExit('candidate sourceExcerpt block not found')
+          text = text.replace(old_excerpt, new_excerpt, 1)
+          evidence.write_text(text, encoding='utf-8')
+
+          pipeline = Path('src/pipeline.ts')
+          text = pipeline.read_text(encoding='utf-8')
+          old = 'const evidenceCandidates = buildEvidenceCandidates(preliminaryThreads, minEvidenceValue);'
+          new = 'const evidenceCandidates = buildEvidenceCandidates(preliminaryThreads, minEvidenceValue, sourceName);'
+          if old not in text:
+              raise SystemExit('pipeline evidence call not found')
+          pipeline.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          evidence_test = Path('test/evidence.test.ts')
+          text = evidence_test.read_text(encoding='utf-8')
+          old = 'assert.equal(candidates[0].schemaVersion, 2);'
+          new = 'assert.equal(candidates[0].schemaVersion, 3);\n  assert.equal(candidates[0].sourceName, "fixture");\n  assert.equal(candidates[0].sourceMessages.length, 2);'
+          if old not in text:
+              raise SystemExit('evidence schema assertion not found')
+          evidence_test.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          knowledge_test = Path('test/knowledge.test.ts')
+          text = knowledge_test.read_text(encoding='utf-8')
+          if 'schemaVersion: 2,' not in text:
+              raise SystemExit('knowledge fixture schema not found')
+          knowledge_test.write_text(text.replace('schemaVersion: 2,', 'schemaVersion: 3,', 1), encoding='utf-8')
+          PY
+
+      - name: Verify
+        run: |
+          npm run check
+          npm test
+
+      - name: Commit provenance schema
+        run: |
+          git config user.name "qidi-wikier-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/evidence.ts src/pipeline.ts test/evidence.test.ts test/knowledge.test.ts
+          git commit -m "Add full evidence source provenance"
+          git push origin HEAD:agent/bootstrap-qidi-wikier
