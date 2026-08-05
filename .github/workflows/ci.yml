@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - agent/bootstrap-qidi-wikier
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Show Node version
+        run: node --version
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Run tests
+        run: npm test
