@@ -152,7 +152,7 @@ test("marks cross-source multi-author support as high review priority without as
         author: "Second User",
         authorId: "user-second-root",
         date: "2026-01-02T12:00:00.000Z",
-        text: "PETG на QIDI Q2 ломается по слоям. Как улучшить межслойку?",
+        text: "PETG на QIDI Q2 расслаивается по слоям. Что изменить?",
         hasMedia: false,
       },
       {
