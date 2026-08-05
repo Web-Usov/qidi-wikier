@@ -1,0 +1,121 @@
+name: Apply root-scoped clustering hotfix
+
+on:
+  push:
+    branches:
+      - agent/bootstrap-qidi-wikier
+    paths:
+      - .github/workflows/apply-root-scope-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bootstrap-qidi-wikier
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Scope clusters by root message
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('src/knowledge.ts')
+          text = path.read_text(encoding='utf-8')
+
+          old_import = 'import type { EntityProfile } from "./entities.ts";'
+          new_import = 'import { extractEntities, type EntityProfile } from "./entities.ts";'
+          if old_import not in text:
+              raise SystemExit('Entity import not found')
+          text = text.replace(old_import, new_import, 1)
+
+          old_pa = r'''["pressure-advance", /(?:pressure\s*advance|(?<![\p{L}\p{N}_])pa(?![\p{L}\p{N}_])|прешур)/iu],'''
+          new_pa = r'''["pressure-advance", /(?:pressure\s*advance|прешур|(?:(?:калибров|башн|линия|коэффициент).{0,20}(?<![\p{L}\p{N}_])pa(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])pa(?![\p{L}\p{N}_]).{0,20}(?:калибров|башн|линия|коэффициент)))/iu],'''
+          if old_pa not in text:
+              raise SystemExit('Pressure advance pattern not found')
+          text = text.replace(old_pa, new_pa, 1)
+
+          old_scope = '''function scopeOf(candidate: ClusterableEvidenceCandidate): EntityProfile {
+            const materialFamilies = uniqueSorted(candidate.entities.materialFamilies);
+            const primaryMaterialFamilies = uniqueSorted(candidate.entities.primaryMaterialFamilies);
+            const materials = uniqueSorted(candidate.entities.materials);
+            return {
+              materials: primaryMaterialFamilies.length > 0
+                ? primaryMaterialFamilies
+                : materialFamilies.length > 0
+                  ? materialFamilies
+                  : materials,
+              materialFamilies,
+              primaryMaterialFamilies,
+              printers: uniqueSorted(candidate.entities.printers),
+              components: canonicalComponents(candidate.entities.components),
+              brands: uniqueSorted(candidate.entities.brands),
+            };
+          }
+
+          function focusTagsOf(candidate: ClusterableEvidenceCandidate): string[] {
+            const text = `${candidate.title}\\n${candidate.sourceExcerpt}`;
+            return FOCUS_PATTERNS.filter(([, pattern]) => pattern.test(text)).map(([name]) => name).sort();
+          }
+          '''.replace('          ', '')
+          new_scope = '''function rootContext(candidate: ClusterableEvidenceCandidate): string {
+            const root = candidate.sourceMessages.find((message) => message.id === candidate.rootId);
+            return `${root?.text ?? ""}\\n${candidate.title}`.trim();
+          }
+
+          function hasScopeAnchors(profile: EntityProfile): boolean {
+            return profile.materials.length > 0
+              || profile.materialFamilies.length > 0
+              || profile.primaryMaterialFamilies.length > 0
+              || profile.printers.length > 0
+              || profile.components.length > 0
+              || profile.brands.length > 0;
+          }
+
+          function scopeOf(candidate: ClusterableEvidenceCandidate): EntityProfile {
+            const rootProfile = extractEntities(rootContext(candidate));
+            const profile = hasScopeAnchors(rootProfile) ? rootProfile : candidate.entities;
+            const materialFamilies = uniqueSorted(profile.materialFamilies);
+            const primaryMaterialFamilies = uniqueSorted(profile.primaryMaterialFamilies);
+            const materials = uniqueSorted(profile.materials);
+            return {
+              materials: primaryMaterialFamilies.length > 0
+                ? primaryMaterialFamilies
+                : materialFamilies.length > 0
+                  ? materialFamilies
+                  : materials,
+              materialFamilies,
+              primaryMaterialFamilies,
+              printers: uniqueSorted(profile.printers),
+              components: canonicalComponents(profile.components),
+              brands: uniqueSorted(profile.brands),
+            };
+          }
+
+          function focusTagsOf(candidate: ClusterableEvidenceCandidate): string[] {
+            const text = rootContext(candidate);
+            return FOCUS_PATTERNS.filter(([, pattern]) => pattern.test(text)).map(([name]) => name).sort();
+          }
+          '''.replace('          ', '')
+          if old_scope not in text:
+              raise SystemExit('Scope/focus functions not found')
+          text = text.replace(old_scope, new_scope, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Verify
+        run: |
+          npm run check
+          npm test
+      - name: Commit hotfix
+        run: |
+          git config user.name "qidi-wikier-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/knowledge.ts
+          git commit -m "Scope knowledge clusters by root message"
+          git push origin HEAD:agent/bootstrap-qidi-wikier
