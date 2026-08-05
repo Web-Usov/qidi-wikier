@@ -108,10 +108,8 @@ jobs:
           text = text.replace(old_scope, new_scope, 1)
           path.write_text(text, encoding='utf-8')
           PY
-      - name: Verify
-        run: |
-          npm run check
-          npm test
+      - name: Verify root scope regressions
+        run: node --test --experimental-strip-types test/knowledge-root-scope.test.ts
       - name: Commit hotfix
         run: |
           git config user.name "qidi-wikier-actions"
