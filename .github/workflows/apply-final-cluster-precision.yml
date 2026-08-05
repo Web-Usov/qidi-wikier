@@ -1,0 +1,171 @@
+name: Apply final cluster precision
+
+on:
+  push:
+    branches:
+      - agent/bootstrap-qidi-wikier
+    paths:
+      - .github/workflows/apply-final-cluster-precision.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bootstrap-qidi-wikier
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply precision patch
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('src/knowledge.ts')
+          text = path.read_text(encoding='utf-8')
+          replacements = [
+            (
+              r'''["bed-adhesion", /(?:адгези.{0,18}(?:стол|платформ)|не\s+лип|отлип|прилип|клей|адгезив|перв(?:ый|ого)\s+сло.{0,20}(?:стол|лип|платформ))/iu],''',
+              r'''["bed-adhesion", /(?:адгези.{0,18}(?:стол|платформ)|не\s+лип|отлип|прилип|перв(?:ый|ого)\s+сло.{0,20}(?:стол|лип|платформ)|(?:клей|адгезив).{0,25}(?:стол|пластин|перв(?:ый|ого)\s+сло)|(?:стол|пластин|перв(?:ый|ого)\s+сло).{0,25}(?:клей|адгезив))/iu],''',
+              'bed adhesion',
+            ),
+            (
+              r'''["drying", /(?:сушк|сушил|сушить|влажн)/iu],''',
+              r'''["drying", /(?:сушк|сушить|влажн|температур.{0,18}суш|суш.{0,18}температур)/iu],''',
+              'drying',
+            ),
+            (
+              r'''["mcu-error", /(?:mcu|shutdown|missed\s+scheduling|timer\s+too\s+close|lost\s+communication)/iu],''',
+              r'''["mcu-error", /(?:(?:mcu|klippy).{0,55}(?:ошиб|error|shutdown|не\s+наход|lost|отвал|disconnect)|(?:shutdown|missed\s+scheduling|timer\s+too\s+close|lost\s+communication).{0,55}(?:mcu|klippy)?)/iu],''',
+              'mcu error',
+            ),
+            (
+              r'''["box-connection", /(?:(?:box|бокс).{0,35}(?:не\s+вид|подключ|соедин|коннект|индикац)|(?:не\s+вид|подключ|соедин|коннект).{0,35}(?:box|бокс))/iu],''',
+              r'''["box-connection", /(?:(?:box|бокс).{0,45}(?:не\s+(?:вид|определ|обнаруж|подключ|соедин|работ)|ошиб.{0,12}(?:подключ|соедин)|как\s+подключ)|(?:не\s+(?:вид|определ|обнаруж|подключ|соедин)|как\s+подключ).{0,45}(?:box|бокс))/iu],''',
+              'box connection',
+            ),
+            (
+              r'''["extruder-feed", /(?:экструдер|шестерн|подач.{0,20}(?:пластик|филамент))/iu],''',
+              r'''["extruder-feed", /(?:заж[её]в|застр|закус|не\s+(?:проходит|проталкива)|пробуксов|шестерн.{0,25}(?:экстру|подач|филамент)|подач.{0,25}(?:не\s|проблем|пропуск)|экструдер.{0,35}(?:заж[её]в|застр|закус|не\s+пода|пробуксов|шестерн))/iu],''',
+              'extruder feed',
+            ),
+          ]
+          for old, new, label in replacements:
+              if old not in text:
+                  raise SystemExit(f'{label} pattern not found')
+              text = text.replace(old, new, 1)
+
+          old_scope = '''  const rootProfile = extractEntities(rootContext(candidate));
+            const profile = hasScopeAnchors(rootProfile) ? rootProfile : candidate.entities;
+            const materialFamilies = uniqueSorted(profile.materialFamilies);
+          '''.replace('          ', '')
+          new_scope = '''  const profile = extractEntities(rootContext(candidate));
+            const materialFamilies = uniqueSorted(profile.materialFamilies);
+          '''.replace('          ', '')
+          if old_scope not in text:
+              raise SystemExit('scope fallback block not found')
+          text = text.replace(old_scope, new_scope, 1)
+
+          old_anchor_fn = '''function hasScopeAnchors(profile: EntityProfile): boolean {
+            return profile.materials.length > 0
+              || profile.materialFamilies.length > 0
+              || profile.primaryMaterialFamilies.length > 0
+              || profile.printers.length > 0
+              || profile.components.length > 0
+              || profile.brands.length > 0;
+          }
+
+          '''.replace('          ', '')
+          if old_anchor_fn not in text:
+              raise SystemExit('hasScopeAnchors function not found')
+          text = text.replace(old_anchor_fn, '', 1)
+
+          fingerprint = '''function supportFingerprint(candidate: ClusterableEvidenceCandidate): string {
+            return createHash("sha256").update(normalizedSupportText(candidate)).digest("hex").slice(0, 16);
+          }
+          '''.replace('          ', '')
+          coherence = fingerprint + '''
+          const ROOT_STOPWORDS = new Set([
+            "qidi", "принтер", "принтера", "принтере", "печать", "печати", "печатать", "печатаю",
+            "вопрос", "подскажите", "помогите", "привет", "всем", "кто", "что", "как", "какой", "какая",
+            "какие", "может", "можно", "нужно", "надо", "есть", "это", "этот", "эта", "для", "при", "после",
+            "перед", "или", "уже", "только", "очень", "вообще", "проблема", "проблемой", "стал", "стала",
+          ]);
+
+          function rootTokens(candidate: ClusterableEvidenceCandidate): Set<string> {
+            const normalized = rootContext(candidate)
+              .replace(/https?:\\/\\/\\S+/giu, " ")
+              .toLowerCase()
+              .replace(/ё/gu, "е");
+            const words = normalized.match(/[\\p{L}\\p{N}+#.-]{3,}/gu) ?? [];
+            return new Set(words
+              .map((word) => word.replace(/^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}+#.-]+$/gu, ""))
+              .filter((word) => word.length >= 3 && !ROOT_STOPWORDS.has(word))
+              .map((word) => word.length > 7 ? word.slice(0, 7) : word));
+          }
+
+          function rootsSimilar(first: ClusterableEvidenceCandidate, second: ClusterableEvidenceCandidate): boolean {
+            const left = rootTokens(first);
+            const right = rootTokens(second);
+            if (left.size === 0 || right.size === 0) return false;
+            let shared = 0;
+            for (const token of left) if (right.has(token)) shared += 1;
+            const union = left.size + right.size - shared;
+            return shared >= 3 || (shared >= 2 && union > 0 && shared / union >= 0.22);
+          }
+
+          function coherentSupport(support: ClusterableEvidenceCandidate[]): boolean {
+            if (support.length < 2) return false;
+            const everyCandidateHasPeer = support.every((candidate, index) => support.some((peer, peerIndex) => (
+              index !== peerIndex && rootsSimilar(candidate, peer)
+            )));
+            const crossSourcePair = support.some((candidate, index) => support.some((peer, peerIndex) => (
+              index !== peerIndex
+              && candidate.sourceName !== peer.sourceName
+              && rootsSimilar(candidate, peer)
+            )));
+            return everyCandidateHasPeer && crossSourcePair;
+          }
+          '''.replace('          ', '')
+          if fingerprint not in text:
+              raise SystemExit('supportFingerprint function not found')
+          text = text.replace(fingerprint, coherence, 1)
+
+          old_high = '''    const supportRatio = evidence.length === 0 ? 0 : supportEvidenceIds.length / evidence.length;
+            const highConfidenceQueue = supportEvidenceIds.length >= 2
+              && independentSupportAuthors.length >= 2
+              && supportFingerprints.length >= 2
+              && supportSourceNames.length >= 2
+              && supportRatio >= 0.5
+              && evidence.length <= 20;
+          '''.replace('          ', '')
+          new_high = '''    const supportRatio = evidence.length === 0 ? 0 : supportEvidenceIds.length / evidence.length;
+            const highConfidenceQueue = supportEvidenceIds.length >= 2
+              && independentSupportAuthors.length >= 2
+              && supportFingerprints.length >= 2
+              && supportSourceNames.length >= 2
+              && supportRatio >= 0.5
+              && evidence.length <= 20
+              && coherentSupport(supportEvidence);
+          '''.replace('          ', '')
+          if old_high not in text:
+              raise SystemExit('high priority block not found')
+          text = text.replace(old_high, new_high, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Verify
+        run: |
+          npm run check
+          npm test
+      - name: Commit patch
+        run: |
+          git config user.name "qidi-wikier-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/knowledge.ts
+          git commit -m "Require coherent root cases for high-priority clusters"
+          git push origin HEAD:agent/bootstrap-qidi-wikier
