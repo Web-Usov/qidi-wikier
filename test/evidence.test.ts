@@ -164,16 +164,18 @@ test("detects requests without a question mark and their practical answer", asyn
 
 test("recognizes short nominal and Cyrillic hardness answers", async () => {
   const manufacturer = await runFixture([
-    message(110, 10, "Alex", "Кто от какого производителя покупает PETG?"),
+    message(110, 10, "Alex", "Кто от какого производителя покупает PETG для QIDI Q2? Нужен пластик для печати при сопле 240 C и столе 80 C."),
     message(111, 20, "Boris", "Plastikoff", 110),
   ]);
   const hardness = await runFixture([
-    message(120, 10, "Alex", "Какой TPU взять для ножек на QIDI Q2?"),
+    message(120, 10, "Alex", "Какой TPU взять для ножек на QIDI Q2? Печать соплом 230 C, нужна твёрдость для функциональной детали."),
     message(121, 20, "Boris", "Д60", 120),
   ]);
 
+  assert.equal(manufacturer.candidates.length, 1);
   assert.equal(manufacturer.candidates[0].status, "ready");
   assert.ok(manufacturer.candidates[0].kinds.includes("answer"));
+  assert.equal(hardness.candidates.length, 1);
   assert.equal(hardness.candidates[0].status, "ready");
   assert.ok(hardness.candidates[0].kinds.includes("answer"));
 });
