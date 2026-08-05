@@ -37,6 +37,7 @@ export interface EvidenceCandidate {
 
 interface EvidenceAnalysis {
   kinds: EvidenceKind[];
+  questionMessages: NormalizedMessage[];
   answerMessages: NormalizedMessage[];
   resultMessages: NormalizedMessage[];
   recommendationMessages: NormalizedMessage[];
@@ -44,20 +45,26 @@ interface EvidenceAnalysis {
   nonReferenceText: string;
 }
 
-const EXPLICIT_OUTCOME = /(?:\bпомогло\b|\bне\s+помогло\b|\bисправил(?:а|ось)?\b|\bустранил(?:а|ось)?\b|\bрешил(?:а)?\s+(?:проблему|вопрос)\b|\bзаработал(?:о|а)?\b|\bперестал(?:о|а)?\b|\bпропал(?:о|а)?\b|\bисчезл(?:о|а)?\b|\bстал(?:о|а)?\s+(?:лучше|хуже|нормально|норм)\b|\bполучил(?:ся|ась|ось)?\b|\bне\s+получил(?:ся|ась|ось)?\b|\bостал(?:ся|ась)\s+доволен)/iu;
-const OUTCOME_CONTEXT = /(?:после\s+этого|в\s+итоге|в\s+результате|по\s+факту).{0,180}(?:помог|исправ|устран|заработ|перестал|пропал|исчез|стал[оа]?\s+(?:лучше|хуже|норм)|получил|доволен|\d)/isu;
-const CONDITIONAL_OUTCOME = /(?:если|когда|может|должно|должен|проверь).{0,45}(?:не\s+)?помогло/isu;
+// JavaScript's \b is ASCII-oriented and does not form reliable boundaries around
+// Cyrillic words. All Russian outcome markers therefore use Unicode lookarounds.
+const EXPLICIT_OUTCOME = /(?<![\p{L}\p{N}_])(?:не\s+помогло|помогло|исправил(?:а|ось|ась)?|устранил(?:а|ось|ась)?|решил(?:а)?\s+(?:проблему|вопрос)|заработал(?:о|а)?|перестал(?:о|а)?|пропал(?:о|а)?|исчезл(?:о|а)?|стал(?:о|а)?\s+(?:лучше|хуже|нормально|норм)|получил(?:ся|ась|ось)?|не\s+получил(?:ся|ась|ось)?|остал(?:ся|ась)\s+доволен|сработал(?:о|а)?|отпечатал(?:ось|ась|ся)|печатает\s+(?:нормально|норм)|держится|не\s+отлипает|отлипл(?:о|а)?)(?![\p{L}\p{N}_])/iu;
+const OUTCOME_CONTEXT = /(?:после\s+этого|в\s+итоге|в\s+результате|по\s+факту).{0,180}(?:помог|исправ|устран|заработ|перестал|пропал|исчез|стал[оа]?\s+(?:лучше|хуже|норм)|получил|сработ|держ|отлип|\d)/isu;
+const UNCERTAIN_OUTCOME = /(?:если|когда|может|возможно|должно|должен|надеюсь|попробую|буду|планирую).{0,80}(?:помог|исправ|устран|заработ|перестан|пропад|исчез|получ|сработ|станет\s+(?:лучше|хуже|норм))/isu;
 const MEASUREMENT_OUTCOME = /(?:измерил|измерила|замерил|замерила|перепроверил|перепроверила|проверил|проверила).{0,100}(?:по\s+факту|получил|оказал|\d)/isu;
 const CONFIGURATION = /(\[(?:gcode_macro|printer|extruder|heater_|bed_mesh)[^\]]*\]|printer\.cfg|config\.cfg|\bM\d{3}\b|\bG\d{1,3}\b|\bSET_[A-Z_]+\b|\b[a-z_]+\s*:\s*[-+\d{])/mu;
 const AI_CLAIM = /(chatgpt|deepseek|дипсик|gemini|claude|гугл\s*ии|нейронк|искусственн.{0,10}интеллект)/iu;
 const MODERATION_BOT = /^Пользователь\s+.+(?:предупрежд[её]н|ограничен|заблокирован).*(?:Причина:|Действие:)/isu;
-const COMMERCE_REFERENCE = /(?:\bavito\.ru\b|\bozon(?:\.ru)?\b|wildberries|wb\.ru|aliexpress|алиэкспресс|multismol\.ru|\/products?\/|\/catalog\/)/iu;
-const RECOMMENDATION = /(?:попробуй|поставь|используй|использовать|суши|сушить|открой|закрой|подними|снизь|опусти|выключи|включи|перенеси|проверь|проверить|замени|убери|вынь|добавь|уменьши|увеличь|настрой(?:те)?(?![а-я])|настроить|калибруй|калибровать|лучше|нужно|надо|стоит)/iu;
+const COMMERCE_REFERENCE = /(?:\bavito\.ru\b|\bozon(?:\.ru)?\b|wildberries|wb\.ru|aliexpress|алиэкспресс|multismol\.ru|dns-shop\.ru|\/products?\/|\/catalog\/)/iu;
+const RECOMMENDATION = /(?:попробуй|пробуйте|поставь|поставьте|используй|использовать|суши|сушить|открой|закрой|подними|снизь|опусти|выключи|включи|перенеси|проверь|проверить|замени|убери|вынь|добавь|уменьши|увеличь|настрой(?:те)?(?![а-я])|настроить|калибруй|калибровать|мажь|клей\s+нужен|лучше|нужно|надо|стоит)/iu;
 const DIRECT_ANSWER = /^(?:да|нет|уже\s+нет|нельзя|можно|не\s+выйдет|не\s+получится|обязательно|не\s+обязательно|верно|точно|именно|так\s+и\s+есть)(?:\s|[,.!;:]|$)/iu;
-const EXPLANATORY_ANSWER = /^(?:это|потому|значит|зависит|скорее|похоже|разница|причина|процент|угол|перекрытие|заходишь|выбираешь|ставишь|смотри|фильтр|скорость|температура|сопло|стол|камера|поток|ретракт|кабель|питание|питалово|выключить|включить)/iu;
-const SETTING_TUPLE = /^\s*\d{1,3}(?:[.,]\d+)?(?:\s*[/\\]\s*\d{1,3}(?:[.,]\d+)?){1,4}\s*$/u;
-const HARDNESS_ANSWER = /^\s*\d{2,3}\s*[ad]\s*$/iu;
+const EXPLANATORY_ANSWER = /^(?:это|потому|значит|зависит|скорее|похоже|разница|причина|процент|угол|перекрытие|заходишь|выбираешь|ставишь|смотри|фильтр|скорость|температура|сопло|стол|камера|поток|ретракт|кабель|питание|питалово|выключить|включить|без\s+адгезива|с\s+адгезивом|клей|адгезив)/iu;
+const QUALITATIVE_ANSWER = /(?:нравится|прочн|хрупк|ж[её]стк|гибк|подойд[её]т|не\s+подойд[её]т|держит|не\s+держит|липнет|не\s+липнет|помогает|не\s+делает|лучше|хуже|нормальн|без\s+проблем)/iu;
+const NON_ANSWER = /^(?:спасибо|благодарю|понял|поняла|ясно|ок(?:ей)?|ага|угу|круто|класс|согласен|согласна|жд[её]м|сорри|не\s+знаю|хз|ноу)[!.,… )\p{Extended_Pictographic}]*$/iu;
+const SETTING_TUPLE = /^\s*\d{1,3}(?:[.,]\d+)?(?:\s*[/\\,]\s*\d{1,3}(?:[.,]\d+)?){1,4}\s*$/u;
+const HARDNESS_ANSWER = /^\s*(?:shore\s*)?\d{2,3}\s*[adд]\s*$/iu;
 const REPEATED_TEST = /(?:на\s+(?:двух|тр[её]х|четыр[её]х|пяти|\d+)\s+(?:детал|тест|печат)|несколько\s+раз|повторил|повторила|дважды|трижды)/iu;
+const REQUEST_WITHOUT_QUESTION_MARK = /(?:^|[.!;:]\s+|(?:ребят[аы]?|народ|коллеги|господа|парни|мужики)[,!:;\s—-]+)(?:а\s+)?(?:можете|можешь)\s+(?:сказать|подсказать)|(?:^|[.!;:]\s+)(?:господа[,!:;\s—-]*)?(?:дайте|скиньте|пришлите)|(?:какие|какую|какой)\s+(?:параметр|настройк|температур|скорост|обдув|расход|профил)|(?:нужны?|нужна)\s+(?:настройк|помощь|совет)|(?:а\s+почему|а\s+как|а\s+что)\s+/iu;
+const SHORT_NOMINAL_QUESTION = /(?:кто|какой|какая|какие|производител|бренд|фирм|материал|пластик|сопло|клей|адгезив|чем\s+печат|что\s+взять)/iu;
 
 const PARAMETER_PATTERNS: Array<[EvidenceParameter["kind"], RegExp]> = [
   ["temperature", /-?\d{2,3}(?:[.,]\d+)?\s*(?:°\s*)?[cс](?![a-zа-я])/giu],
@@ -75,6 +82,15 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function uniqueMessages(messages: NormalizedMessage[]): NormalizedMessage[] {
+  const seen = new Set<number>();
+  return messages.filter((message) => {
+    if (seen.has(message.id)) return false;
+    seen.add(message.id);
+    return true;
+  });
+}
+
 function stripReferences(text: string): string {
   return text
     .replace(/https?:\/\/\S+/giu, " ")
@@ -85,7 +101,7 @@ function stripReferences(text: string): string {
 
 function evidenceQuestionLike(text: string): boolean {
   const cleaned = stripReferences(text);
-  return cleaned.length > 0 && isQuestionLike(cleaned);
+  return cleaned.length > 0 && (isQuestionLike(cleaned) || REQUEST_WITHOUT_QUESTION_MARK.test(cleaned));
 }
 
 function hasEntities(profile: EntityProfile): boolean {
@@ -141,7 +157,7 @@ function extractParameters(thread: Thread): EvidenceParameter[] {
 
 function isResultMessage(message: NormalizedMessage): boolean {
   const text = stripReferences(message.text);
-  if (!text || CONDITIONAL_OUTCOME.test(text)) return false;
+  if (!text || evidenceQuestionLike(text) || UNCERTAIN_OUTCOME.test(text)) return false;
   return EXPLICIT_OUTCOME.test(text) || OUTCOME_CONTEXT.test(text) || MEASUREMENT_OUTCOME.test(text);
 }
 
@@ -154,29 +170,44 @@ function isConfigurationMessage(message: NormalizedMessage): boolean {
   return CONFIGURATION.test(message.text);
 }
 
-function isSubstantiveAnswer(message: NormalizedMessage, rootText: string): boolean {
+function isShortNominalAnswer(text: string, questionText: string): boolean {
+  if (!SHORT_NOMINAL_QUESTION.test(questionText)) return false;
+  if (text.length < 2 || text.length > 60) return false;
+  const words = text.match(/[\p{L}\p{N}+#.-]+/gu) ?? [];
+  return words.length >= 1 && words.length <= 5 && words.join("").length >= 3;
+}
+
+function isSubstantiveAnswer(message: NormalizedMessage, questionText: string): boolean {
   const text = stripReferences(message.text);
-  if (!text || evidenceQuestionLike(text)) return false;
+  if (!text || evidenceQuestionLike(text) || NON_ANSWER.test(text)) return false;
   if (isResultMessage(message) || isRecommendationMessage(message) || isConfigurationMessage(message)) return true;
-  if (DIRECT_ANSWER.test(text) || SETTING_TUPLE.test(text) || HARDNESS_ANSWER.test(text)) return true;
+  if (DIRECT_ANSWER.test(text) || HARDNESS_ANSWER.test(text)) return true;
+  if (SETTING_TUPLE.test(text) && /(настройк|температур|обдув|скорост|сопл|стол|камер|поток|ретракт)/iu.test(questionText)) return true;
 
   const parameters = extractMessageParameters(message);
   const entities = extractEntities(text);
   if (parameters.length > 0 || hasEntities(entities)) return true;
-  if (technicalScore(message) >= 3 && text.length >= 12) return true;
-  if (EXPLANATORY_ANSWER.test(text) && text.length >= 10) return true;
-  if (/\d{2,3}/u.test(text) && /(температур|градус|до\s+скольки|суш)/iu.test(rootText)) return true;
-  return false;
+  if (QUALITATIVE_ANSWER.test(text) && text.length >= 5) return true;
+  if (technicalScore(message) >= 3 && text.length >= 10) return true;
+  if (EXPLANATORY_ANSWER.test(text) && text.length >= 8) return true;
+  if (/\d{2,3}/u.test(text) && /(температур|градус|до\s+скольки|суш)/iu.test(questionText)) return true;
+  return isShortNominalAnswer(text, questionText);
 }
 
 function analyzeThread(thread: Thread, parameters: EvidenceParameter[]): EvidenceAnalysis {
-  const root = thread.messages[0];
-  const rootText = stripReferences(root?.text ?? "");
   const questionMessages = thread.messages.filter((message) => evidenceQuestionLike(message.text));
-  const responseMessages = thread.messages.slice(1);
-  const answerMessages = root && evidenceQuestionLike(root.text)
-    ? responseMessages.filter((message) => isSubstantiveAnswer(message, rootText))
-    : [];
+  const answerMessages: NormalizedMessage[] = [];
+  let latestQuestion: NormalizedMessage | undefined;
+  for (const message of thread.messages) {
+    if (evidenceQuestionLike(message.text)) {
+      latestQuestion = message;
+      continue;
+    }
+    if (latestQuestion && message.id !== latestQuestion.id && isSubstantiveAnswer(message, stripReferences(latestQuestion.text))) {
+      answerMessages.push(message);
+    }
+  }
+
   const resultMessages = thread.messages.filter(isResultMessage);
   const recommendationMessages = thread.messages.filter(isRecommendationMessage);
   const configurationMessages = thread.messages.filter(isConfigurationMessage);
@@ -192,7 +223,8 @@ function analyzeThread(thread: Thread, parameters: EvidenceParameter[]): Evidenc
   if (hasReference) kinds.push("reference");
   return {
     kinds: unique(kinds) as EvidenceKind[],
-    answerMessages,
+    questionMessages,
+    answerMessages: uniqueMessages(answerMessages),
     resultMessages,
     recommendationMessages,
     configurationMessages,
@@ -225,6 +257,8 @@ function isMeaningfulCandidate(
     || analysis.kinds.includes("configuration")
     || analysis.kinds.includes("reference");
   const detailedOutcome = analysis.kinds.includes("result") && analysis.nonReferenceText.length >= 55;
+  const mediaFirst = thread.messages[0]?.hasMedia && stripReferences(thread.messages[0].text).length === 0;
+  if (mediaFirst && !structured && analysis.nonReferenceText.length < 100) return false;
   if (thread.messages.length === 1 && analysis.nonReferenceText.length < 60 && !structured && !detailedOutcome) return false;
   if (thread.score <= 4 && analysis.nonReferenceText.length < 70 && !structured && !detailedOutcome) return false;
   if (analysis.kinds.length === 1 && analysis.kinds[0] === "observation" && analysis.nonReferenceText.length < 80 && !structured) return false;
@@ -264,6 +298,15 @@ function excerpt(thread: Thread): string {
   return text.slice(0, 1200);
 }
 
+function candidateTitle(thread: Thread): string {
+  const preferred = thread.messages.find((message) => {
+    const text = stripReferences(message.text);
+    return text.length >= 20 && (evidenceQuestionLike(text) || technicalScore(message) >= 3 || hasEntities(extractEntities(text)));
+  });
+  const fallback = thread.messages.find((message) => stripReferences(message.text).length >= 20);
+  return stripReferences(preferred?.text ?? fallback?.text ?? thread.title ?? "Без названия").slice(0, 110) || "Без названия";
+}
+
 export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0.6): EvidenceCandidate[] {
   return threads.flatMap((thread) => {
     if (thread.knowledgeValue < minKnowledgeValue) return [];
@@ -291,7 +334,7 @@ export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0
       threadId: thread.id,
       rootId: thread.rootId,
       topic: thread.topic,
-      title: thread.title,
+      title: candidateTitle(thread),
       messageIds: thread.messages.map((message) => message.id),
       authors: unique(thread.messages.map((message) => message.author)),
       dateStart: dates[0] ?? "",
