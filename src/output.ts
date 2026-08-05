@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { extractEntities } from "./entities.ts";
+import type { EvidenceCandidate, EvidenceStatus } from "./evidence.ts";
 import {
   renderChunkHeader,
   renderContextReview,
@@ -68,6 +69,69 @@ export function stratifiedReviewSample(records: ContextLinkReviewRecord[], sampl
   return sampled;
 }
 
+function evidenceReviewSample(candidates: EvidenceCandidate[], sampleSize: number): EvidenceCandidate[] {
+  const statuses: EvidenceStatus[] = ["ready", "question-only", "needs-context", "reference-only"];
+  const sampled: EvidenceCandidate[] = [];
+  const base = Math.floor(sampleSize / statuses.length);
+  let remaining = sampleSize - base * statuses.length;
+  for (const status of statuses) {
+    const band = candidates.filter((candidate) => candidate.status === status)
+      .sort((a, b) => b.knowledgeValue - a.knowledgeValue || a.rootId - b.rootId);
+    const target = Math.min(band.length, base + (remaining > 0 ? 1 : 0));
+    if (remaining > 0) remaining -= 1;
+    sampled.push(...evenlySample(band, target));
+  }
+  if (sampled.length < sampleSize) {
+    const selected = new Set(sampled.map((candidate) => candidate.id));
+    sampled.push(...candidates.filter((candidate) => !selected.has(candidate.id)).slice(0, sampleSize - sampled.length));
+  }
+  return sampled;
+}
+
+function renderEvidenceReview(candidates: EvidenceCandidate[], sourceName: string, totals: Record<EvidenceStatus, number>): string {
+  const lines = [
+    "# Проверка кандидатов доказательств",
+    "",
+    `Источник: \`${sourceName}\``,
+    "",
+    `Всего кандидатов: ready=${totals.ready}, question-only=${totals["question-only"]}, needs-context=${totals["needs-context"]}, reference-only=${totals["reference-only"]}.`,
+    "",
+    "> Это автоматически извлечённые черновики. Предварительная надёжность C/D не заменяет редакторскую проверку и не подтверждает истинность совета.",
+    "",
+  ];
+  for (const status of ["ready", "question-only", "needs-context", "reference-only"] as const) {
+    const band = candidates.filter((candidate) => candidate.status === status);
+    lines.push(`# Статус ${status}`, "", `В выборке: ${band.length}.`, "");
+    for (const candidate of band) {
+      const entities = [
+        candidate.entities.materials.length ? `материалы=${candidate.entities.materials.join("/")}` : "",
+        candidate.entities.printers.length ? `принтеры=${candidate.entities.printers.join("/")}` : "",
+        candidate.entities.components.length ? `компоненты=${candidate.entities.components.join("/")}` : "",
+        candidate.entities.brands.length ? `бренды=${candidate.entities.brands.join("/")}` : "",
+      ].filter(Boolean).join("; ") || "нет";
+      lines.push(
+        `## ${candidate.id} — ${candidate.title}`,
+        "",
+        `- Точная цепочка: \`${candidate.threadId}\``,
+        `- Тема: \`${candidate.topic}\``,
+        `- Типы: ${candidate.kinds.join(", ") || "нет"}`,
+        `- Статус: \`${candidate.status}\``,
+        `- Предварительная надёжность: **${candidate.provisionalReliability}**`,
+        `- Ценность: ${candidate.knowledgeValue}; технический балл: ${candidate.technicalScore}`,
+        `- Сущности: ${entities}`,
+        `- Параметры: ${candidate.parameters.map((parameter) => `${parameter.value} [${parameter.messageId}]`).join("; ") || "нет"}`,
+        `- Флаги: ${candidate.flags.join("; ")}`,
+        "",
+        "### Исходный фрагмент",
+        "",
+        candidate.sourceExcerpt,
+        "",
+      );
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export async function writeChunks(
   threads: Thread[],
   chunksDir: string,
@@ -105,11 +169,13 @@ export async function writeArtifacts(options: {
   quarantineDir: string;
   skippedDir: string;
   reviewDir: string;
+  evidenceDir: string;
   chunkFiles: Array<{ file: string; threads: number; chars: number }>;
   statistics: Record<string, unknown>;
   skipped: SkipRecord[];
   quarantined: NormalizedMessage[];
   reviewRecords: ContextLinkReviewRecord[];
+  evidenceCandidates: EvidenceCandidate[];
   reviewSampleSize: number;
 }): Promise<void> {
   const sample = stratifiedReviewSample(options.reviewRecords, options.reviewSampleSize);
@@ -118,12 +184,21 @@ export async function writeArtifacts(options: {
     medium: options.reviewRecords.filter((record) => record.confidence === "medium").length,
     high: options.reviewRecords.filter((record) => record.confidence === "high").length,
   };
+  const evidenceSample = evidenceReviewSample(options.evidenceCandidates, options.reviewSampleSize);
+  const evidenceTotals: Record<EvidenceStatus, number> = {
+    ready: options.evidenceCandidates.filter((candidate) => candidate.status === "ready").length,
+    "question-only": options.evidenceCandidates.filter((candidate) => candidate.status === "question-only").length,
+    "needs-context": options.evidenceCandidates.filter((candidate) => candidate.status === "needs-context").length,
+    "reference-only": options.evidenceCandidates.filter((candidate) => candidate.status === "reference-only").length,
+  };
   await Promise.all([
-    writeFile(join(options.output, "manifest.json"), `${JSON.stringify({ schemaVersion: 3, sourceName: options.sourceName, inputFile: basename(options.inputFile), generatedAt: new Date().toISOString(), chunks: options.chunkFiles }, null, 2)}\n`, "utf8"),
+    writeFile(join(options.output, "manifest.json"), `${JSON.stringify({ schemaVersion: 4, sourceName: options.sourceName, inputFile: basename(options.inputFile), generatedAt: new Date().toISOString(), chunks: options.chunkFiles }, null, 2)}\n`, "utf8"),
     writeFile(join(options.output, "statistics.json"), `${JSON.stringify(options.statistics, null, 2)}\n`, "utf8"),
     writeFile(join(options.quarantineDir, "uncertain_messages.jsonl"), options.quarantined.map((message) => JSON.stringify(message)).join("\n") + (options.quarantined.length ? "\n" : ""), "utf8"),
     writeFile(join(options.skippedDir, "removal_report.json"), `${JSON.stringify(options.skipped, null, 2)}\n`, "utf8"),
     writeFile(join(options.reviewDir, "context_graph.jsonl"), options.reviewRecords.map((record) => JSON.stringify(record)).join("\n") + (options.reviewRecords.length ? "\n" : ""), "utf8"),
     writeFile(join(options.reviewDir, "context_links_sample.md"), renderContextReview(sample, options.sourceName, totals), "utf8"),
+    writeFile(join(options.evidenceDir, "candidates.jsonl"), options.evidenceCandidates.map((candidate) => JSON.stringify(candidate)).join("\n") + (options.evidenceCandidates.length ? "\n" : ""), "utf8"),
+    writeFile(join(options.reviewDir, "evidence_candidates_sample.md"), renderEvidenceReview(evidenceSample, options.sourceName, evidenceTotals), "utf8"),
   ]);
 }
