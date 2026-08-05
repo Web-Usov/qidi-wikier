@@ -154,7 +154,7 @@ export async function prepareTelegramExport(options: PrepareOptions): Promise<vo
     D: evidenceCandidates.filter((candidate) => candidate.provisionalReliability === "D").length,
   };
   const evidenceKindCounts = Object.fromEntries(
-    (["question", "observation", "recommendation", "result", "configuration", "reference"] as const)
+    (["question", "observation", "answer", "recommendation", "result", "configuration", "reference"] as const)
       .map((kind) => [kind, evidenceCandidates.filter((candidate) => candidate.kinds.includes(kind)).length]),
   );
   const statistics = {
