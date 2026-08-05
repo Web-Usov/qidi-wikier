@@ -87,7 +87,9 @@ function detectKinds(thread: Thread, combined: string, parameters: EvidenceParam
   const kinds: EvidenceKind[] = [];
   if (thread.messages.some((message) => isQuestionLike(message.text))) kinds.push("question");
   if (thread.score >= 3 || parameters.length || combined.length >= 120) kinds.push("observation");
-  if (ACTION_ANSWER.test(combined)) kinds.push("recommendation");
+  if (thread.messages.some((message) => !isQuestionLike(message.text) && ACTION_ANSWER.test(message.text))) {
+    kinds.push("recommendation");
+  }
   if (RESULT.test(combined)) kinds.push("result");
   if (CONFIGURATION.test(combined)) kinds.push("configuration");
   if (/https?:\/\//iu.test(combined)) kinds.push("reference");
