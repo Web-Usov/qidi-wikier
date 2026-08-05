@@ -121,3 +121,5 @@ jobs:
           git add src/knowledge.ts
           git commit -m "Require coherent root cases for high-priority clusters"
           git push origin HEAD:agent/bootstrap-qidi-wikier
+
+# retry after aligning medium-priority fixture
