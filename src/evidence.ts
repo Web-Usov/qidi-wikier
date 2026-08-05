@@ -60,7 +60,7 @@ interface EvidenceAnalysis {
 // JavaScript's \b is ASCII-oriented and does not form reliable boundaries around
 // Cyrillic words. All Russian outcome markers therefore use Unicode lookarounds.
 const EXPLICIT_OUTCOME = /(?<![\p{L}\p{N}_])(?:не\s+помогло|помогло|исправил(?:а|ось|ась)?|устранил(?:а|ось|ась)?|решил(?:а)?\s+(?:проблему|вопрос)|заработал(?:о|а)?|перестал(?:о|а)?|пропал(?:о|а)?|исчезл(?:о|а)?|стал(?:о|а)?\s+(?:лучше|хуже|нормально|норм)|получил(?:ся|ась|ось)|не\s+получил(?:ся|ась|ось)|остал(?:ся|ась)\s+доволен|сработал(?:о|а)?|отпечатал(?:ось|ась|ся)|печатает\s+(?:нормально|норм)|держится|не\s+отлипает|отлипл(?:о|а)?)(?![\p{L}\p{N}_])/iu;
-const OUTCOME_CONTEXT = /(?:после\s+этого|в\s+итоге|в\s+результате|по\s+факту).{0,180}(?:помог|исправ|устран|заработ|перестал|пропал|исчез|стал[оа]?\s+(?:лучше|хуже|норм)|получил|сработ|держ|отлип|\d)/isu;
+const OUTCOME_CONTEXT = /(?:после\s+этого|в\s+итоге|в\s+результате|по\s+факту).{0,180}(?:помог|исправ|устран|заработ|перестал|пропал|исчез|стал[оа]?\s+(?:лучше|хуже|норм)|получил|оказал|сработ|держ|отлип)/isu;
 const UNCERTAIN_OUTCOME = /(?:если|когда|может|возможно|должно|должен|надеюсь|попробую|буду|планирую).{0,80}(?:помог|исправ|устран|заработ|перестан|пропад|исчез|получ|сработ|станет\s+(?:лучше|хуже|норм))/isu;
 const MEASUREMENT_OUTCOME = /(?:измерил|измерила|замерил|замерила|перепроверил|перепроверила|проверил|проверила).{0,100}(?:по\s+факту|получил|оказал|\d)/isu;
 const CONFIGURATION = /(\[(?:gcode_macro|printer|extruder|heater_|bed_mesh)[^\]]*\]|printer\.cfg|config\.cfg|\bM\d{3}\b|\bG\d{1,3}\b|\bSET_[A-Z_]+\b|\b[a-z_]+\s*:\s*[-+\d{])/mu;
@@ -68,7 +68,7 @@ const AI_CLAIM = /(chatgpt|deepseek|дипсик|gemini|claude|гугл\s*ии|�
 const EXTERNAL_ATTRIBUTION = /(?:ответил(?:и|а)?\s+(?:мне\s+)?(?:производител|поддержк|магазин|продавец)|ответ\s+(?:от\s+)?(?:производител|поддержк|магазин|продавц)|производитель\s+(?:пишет|говорит|ответил|рекомендует)|мне\s+(?:написали|ответили)\s+(?:из|от)|цитат[аы]|скопированн|пересланн)/iu;
 const MODERATION_BOT = /^Пользователь\s+.+(?:предупрежд[её]н|ограничен|заблокирован).*(?:Причина:|Действие:)/isu;
 const COMMERCE_REFERENCE = /(?:\bavito\.ru\b|\bozon(?:\.ru)?\b|wildberries|wb\.ru|aliexpress|алиэкспресс|multismol\.ru|dns-shop\.ru|\/products?\/|\/catalog\/)/iu;
-const TECHNICAL_DOMAIN = /(?:3d[- ]?(?:печ|принт)|принтер|печата|печать|слайсер|orca|klipper|g-?code|макрос|прошив|калибров|шейпер|input\s*shap|pressure\s*advance|ретракт|экстру|хотэнд|термистор|сопл|стол|камера|филамент|пластик|катуш|pla|petg|abs|asa|tpu|pa\d*|нейлон|поликарбонат|pps|peek|карбон|стекловолок|адгези|усадк|сло[йя]|мост|нависан|обдув|вентилятор|рем[её]н|шкив|направляющ|каретк|подшипник|резьб|шестерн|детал|модел(?:ь|и)|stl|step|компас|fusion|freecad|cad|qidi|q2|q1|plus\s*4|x-?max)/iu;
+const TECHNICAL_DOMAIN = /(?:3d[- ]?(?:печ|принт)|принтер|печата|печать|слайсер|orca|klipper|g-?code|макрос|прошив|калибров|шейпер|input\s*shap|pressure\s*advance|ретракт|экстру|хотэнд|термистор|сопл|стол|камера|филамент|пластик|катуш|pla|petg|abs|asa|tpu|pa\d*|нейлон|поликарбонат|pps|peek|карбон|стекловолок|адгези|усадк|сло[йя]|мост|нависан|обдув|вентилятор|(?<![\p{L}\p{N}_])(?:ремень|ремня|ремни|ремней|ремню|ремнём|ремнями|ремнях)(?![\p{L}\p{N}_])|шкив|направляющ|каретк|подшипник|резьб|шестерн|детал|модел(?:ь|и)|stl|step|компас|fusion|freecad|cad|qidi|q2|q1|plus\s*4|x-?max)/iu;
 const RECOMMENDATION = /(?:попробуй|пробуйте|поставь|поставьте|используй|использовать|суши|сушить|открой|закрой|подними|снизь|опусти|выключи|включи|перенеси|проверь|проверить|замени|убери|вынь|добавь|уменьши|увеличь|настрой(?:те)?(?![а-я])|настроить|калибруй|калибровать|мажь|клей\s+нужен|лучше|нужно|надо|стоит)/iu;
 const DIRECT_ANSWER = /^(?:да|нет|уже\s+нет|нельзя|можно|не\s+выйдет|не\s+получится|обязательно|не\s+обязательно|верно|точно|именно|так\s+и\s+есть)(?:\s|[,.!;:]|$)/iu;
 const EXPLANATORY_ANSWER = /^(?:это|потому|значит|зависит|скорее|похоже|разница|причина)/iu;
@@ -305,11 +305,11 @@ function reliabilityFor(
     if (message.id === root.id || message.authorId !== root.authorId) return false;
     const text = stripReferences(message.text);
     const resultParameters = extractMessageParameters(message);
-    const detailed = REPEATED_TEST.test(text)
-      || OUTCOME_CONTEXT.test(text)
-      || MEASUREMENT_OUTCOME.test(text)
-      || text.length >= 90;
-    return text.length >= 35 && resultParameters.length > 0 && detailed;
+    const explicitOutcome = EXPLICIT_OUTCOME.test(text) || OUTCOME_CONTEXT.test(text);
+      const detailed = REPEATED_TEST.test(text)
+        || OUTCOME_CONTEXT.test(text)
+        || text.length >= 90;
+      return text.length >= 35 && resultParameters.length > 0 && explicitOutcome && detailed;
   });
   if (!qualifyingResult) return "D";
 
