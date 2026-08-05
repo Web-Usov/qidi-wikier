@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { EntityProfile } from "./entities.ts";
+import { extractEntities, type EntityProfile } from "./entities.ts";
 import type { EvidenceCandidate, EvidenceParameter, EvidenceSourceMessage } from "./evidence.ts";
 
 export type KnowledgeEvidenceRole = "support" | "caution" | "unresolved";
@@ -84,7 +84,7 @@ const FOCUS_PATTERNS: Array<[string, RegExp]> = [
   ["exhaust-fan", /(?:вытяжн.{0,20}(?:вентилятор|кулер)|вентилятор.{0,20}вытяж)/iu],
   ["retraction", /(?:ретракт|retract)/iu],
   ["flow", /(?:объ[её]мн.{0,20}(?:расход|поток)|flow\s*rate|макс.{0,10}поток)/iu],
-  ["pressure-advance", /(?:pressure\s*advance|(?<![\p{L}\p{N}_])pa(?![\p{L}\p{N}_])|прешур)/iu],
+  ["pressure-advance", /(?:pressure\s*advance|прешур|(?:(?:калибров|башн|линия|коэффициент).{0,20}(?<![\p{L}\p{N}_])pa(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])pa(?![\p{L}\p{N}_]).{0,20}(?:калибров|башн|линия|коэффициент)))/iu],
   ["bed-mesh", /(?:bed[_ -]?mesh|сетка\s+стол|карта\s+стол)/iu],
   ["z-offset", /(?:z[-_ ]?offset|зет.?офсет|офсет.{0,10}z)/iu],
   ["belts", /(?<![\p{L}\p{N}_])(?:ремень|ремня|ремни|ремней|ремню|ремнём|ремнями|ремнях)(?![\p{L}\p{N}_])|натяжк.{0,15}рем(?:ня|ней|ни)/iu],
@@ -112,10 +112,26 @@ function specificComponents(components: string[]): string[] {
   return uniqueSorted(components.filter((value) => !GENERIC_COMPONENTS.has(value)));
 }
 
+function rootContext(candidate: ClusterableEvidenceCandidate): string {
+  const root = candidate.sourceMessages.find((message) => message.id === candidate.rootId);
+  return `${root?.text ?? ""}\n${candidate.title}`.trim();
+}
+
+function hasScopeAnchors(profile: EntityProfile): boolean {
+  return profile.materials.length > 0
+    || profile.materialFamilies.length > 0
+    || profile.primaryMaterialFamilies.length > 0
+    || profile.printers.length > 0
+    || profile.components.length > 0
+    || profile.brands.length > 0;
+}
+
 function scopeOf(candidate: ClusterableEvidenceCandidate): EntityProfile {
-  const materialFamilies = uniqueSorted(candidate.entities.materialFamilies);
-  const primaryMaterialFamilies = uniqueSorted(candidate.entities.primaryMaterialFamilies);
-  const materials = uniqueSorted(candidate.entities.materials);
+  const rootProfile = extractEntities(rootContext(candidate));
+  const profile = hasScopeAnchors(rootProfile) ? rootProfile : candidate.entities;
+  const materialFamilies = uniqueSorted(profile.materialFamilies);
+  const primaryMaterialFamilies = uniqueSorted(profile.primaryMaterialFamilies);
+  const materials = uniqueSorted(profile.materials);
   return {
     materials: primaryMaterialFamilies.length > 0
       ? primaryMaterialFamilies
@@ -124,14 +140,14 @@ function scopeOf(candidate: ClusterableEvidenceCandidate): EntityProfile {
         : materials,
     materialFamilies,
     primaryMaterialFamilies,
-    printers: uniqueSorted(candidate.entities.printers),
-    components: canonicalComponents(candidate.entities.components),
-    brands: uniqueSorted(candidate.entities.brands),
+    printers: uniqueSorted(profile.printers),
+    components: canonicalComponents(profile.components),
+    brands: uniqueSorted(profile.brands),
   };
 }
 
 function focusTagsOf(candidate: ClusterableEvidenceCandidate): string[] {
-  const text = `${candidate.title}\n${candidate.sourceExcerpt}`;
+  const text = rootContext(candidate);
   return FOCUS_PATTERNS.filter(([, pattern]) => pattern.test(text)).map(([name]) => name).sort();
 }
 
