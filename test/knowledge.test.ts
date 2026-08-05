@@ -120,17 +120,51 @@ test("separates support, caution and unresolved evidence", () => {
 });
 
 test("marks cross-source multi-author support as high review priority without assigning reliability", () => {
-  const common = candidate("EVIDENCE-A-1", { sourceName: "qidi_common_chat" });
+  const common = candidate("EVIDENCE-A-1", {
+    sourceName: "qidi_common_chat",
+    messageIds: [1, 101],
+    sourceMessages: [
+      {
+        id: 1,
+        author: "First User",
+        authorId: "user-first-root",
+        date: "2026-01-01T12:00:00.000Z",
+        text: "PETG на QIDI Q2 расслаивается по слоям. Что изменить?",
+        hasMedia: false,
+      },
+      {
+        id: 101,
+        author: "First Expert",
+        authorId: "user-first-expert",
+        date: "2026-01-01T12:01:00.000Z",
+        replyTo: 1,
+        text: "Подними температуру сопла до 255 C и снизь скорость.",
+        hasMedia: false,
+      },
+    ],
+  });
   const q2 = candidate("EVIDENCE-B-2", {
     sourceName: "qidi_q2_chat",
-    sourceMessages: [{
-      id: 2,
-      author: "Second Author",
-      authorId: "user-second",
-      date: "2026-01-02T12:00:00.000Z",
-      text: "PETG на QIDI Q2: межслойка улучшилась при 255 C",
-      hasMedia: false,
-    }],
+    messageIds: [2, 102],
+    sourceMessages: [
+      {
+        id: 2,
+        author: "Second User",
+        authorId: "user-second-root",
+        date: "2026-01-02T12:00:00.000Z",
+        text: "PETG на QIDI Q2 ломается по слоям. Как улучшить межслойку?",
+        hasMedia: false,
+      },
+      {
+        id: 102,
+        author: "Second Expert",
+        authorId: "user-second-expert",
+        date: "2026-01-02T12:01:00.000Z",
+        replyTo: 2,
+        text: "Уменьши обдув и проверь сухость PETG перед печатью.",
+        hasMedia: false,
+      },
+    ],
   });
 
   const [cluster] = buildKnowledgeClusters([common, q2]);
@@ -140,7 +174,8 @@ test("marks cross-source multi-author support as high review priority without as
   assert.equal(cluster.automatedReliability, "unrated");
   assert.ok(cluster.flags.includes("multi-source"));
   assert.ok(cluster.flags.includes("multi-author-support"));
-  assert.equal(cluster.independentAuthors.length, 2);
+  assert.equal(cluster.independentSupportAuthors.length, 2);
+  assert.equal(cluster.supportFingerprints.length, 2);
 });
 
 test("preserves parameter provenance by evidence role", () => {
