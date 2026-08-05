@@ -52,6 +52,7 @@ test("extracts ready evidence with exact parameters and provisional C reliabilit
   assert.equal(statistics.schemaVersion, 4);
   assert.equal(statistics.evidenceCandidates, 1);
   assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].schemaVersion, 2);
   assert.equal(candidates[0].status, "ready");
   assert.equal(candidates[0].provisionalReliability, "C");
   assert.ok(candidates[0].kinds.includes("result"));
@@ -79,4 +80,60 @@ test("marks copied AI claims as unverified D evidence", async () => {
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].provisionalReliability, "D");
   assert.ok(candidates[0].flags.includes("ai-generated-or-copied-claim"));
+});
+
+test("recognizes terse direct replies as answers", async () => {
+  const { candidates } = await runFixture([
+    message(40, 10, "Alex", "На QIDI Q2 после отключения света пластик не идёт. Продолжить печать уже не получится?"),
+    message(41, 20, "Boris", "Уже нет", 40),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "ready");
+  assert.ok(candidates[0].kinds.includes("answer"));
+  assert.ok(candidates[0].flags.includes("answer-not-validated"));
+  assert.equal(candidates[0].provisionalReliability, "D");
+});
+
+test("does not treat URL query strings as questions or parameters", async () => {
+  const { candidates } = await runFixture([
+    message(50, 10, "Alex", "Настройки PA6: https://wiki.qidi-russia.ru/%D0%9F%D1%80%D0%BE%D1%84%D0%B8%D0%BB%D1%8C?x=1"),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "reference-only");
+  assert.ok(!candidates[0].kinds.includes("question"));
+  assert.deepEqual(candidates[0].parameters, []);
+});
+
+test("suppresses low-information advice fragments and moderation messages", async () => {
+  const { candidates } = await runFixture([
+    message(60, 10, "Moderator", "Пользователь @linkey предупреждён (3 из 3) • Причина: настройки печати • Действие: Ограничен 🔇"),
+    message(61, 20, "Alex", "А попробуй прочитать о чем говорит принтер)"),
+  ]);
+
+  assert.equal(candidates.length, 0);
+});
+
+test("keeps single-message measurements at provisional D reliability", async () => {
+  const { candidates } = await runFixture([
+    message(70, 10, "Alex", "Сейчас проверил деталь на QIDI Q2: в модели 4,5 мм, по факту получилось 4,64 мм."),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "ready");
+  assert.equal(candidates[0].provisionalReliability, "D");
+  assert.ok(candidates[0].flags.includes("single-message"));
+});
+
+test("does not award C reliability to another author's anecdotal result", async () => {
+  const { candidates } = await runFixture([
+    message(80, 10, "Alex", "Какие сопла ставите на QIDI Q1 Pro для композитов? Родное прошло 900 часов?"),
+    message(81, 20, "Boris", "Печатаю композитами на родном сопле при 280 C, после 1000 часов качество осталось нормальным.", 80),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "ready");
+  assert.ok(candidates[0].kinds.includes("answer"));
+  assert.equal(candidates[0].provisionalReliability, "D");
 });
