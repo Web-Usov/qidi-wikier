@@ -59,12 +59,13 @@ const COMMERCE_REFERENCE = /(?:\bavito\.ru\b|\bozon(?:\.ru)?\b|wildberries|wb\.r
 const TECHNICAL_DOMAIN = /(?:3d[- ]?(?:печ|принт)|принтер|печата|печать|слайсер|orca|klipper|g-?code|макрос|прошив|калибров|шейпер|input\s*shap|pressure\s*advance|ретракт|экстру|хотэнд|термистор|сопл|стол|камера|филамент|пластик|катуш|pla|petg|abs|asa|tpu|pa\d*|нейлон|поликарбонат|pps|peek|карбон|стекловолок|адгези|усадк|сло[йя]|мост|нависан|обдув|вентилятор|рем[её]н|шкив|направляющ|каретк|подшипник|резьб|шестерн|детал|модел(?:ь|и)|stl|step|компас|fusion|freecad|cad|qidi|q2|q1|plus\s*4|x-?max)/iu;
 const RECOMMENDATION = /(?:попробуй|пробуйте|поставь|поставьте|используй|использовать|суши|сушить|открой|закрой|подними|снизь|опусти|выключи|включи|перенеси|проверь|проверить|замени|убери|вынь|добавь|уменьши|увеличь|настрой(?:те)?(?![а-я])|настроить|калибруй|калибровать|мажь|клей\s+нужен|лучше|нужно|надо|стоит)/iu;
 const DIRECT_ANSWER = /^(?:да|нет|уже\s+нет|нельзя|можно|не\s+выйдет|не\s+получится|обязательно|не\s+обязательно|верно|точно|именно|так\s+и\s+есть)(?:\s|[,.!;:]|$)/iu;
-const EXPLANATORY_ANSWER = /^(?:это|потому|значит|зависит|скорее|похоже|разница|причина|процент|угол|перекрытие|заходишь|выбираешь|ставишь|смотри|фильтр|скорость|температура|сопло|стол|камера|поток|ретракт|кабель|питание|питалово|выключить|включить|без\s+адгезива|с\s+адгезивом|клей|адгезив)/iu;
+const EXPLANATORY_ANSWER = /^(?:это|потому|значит|зависит|скорее|похоже|разница|причина)/iu;
 const QUALITATIVE_ANSWER = /(?:нравится|прочн|хрупк|ж[её]стк|гибк|подойд[её]т|не\s+подойд[её]т|держит|не\s+держит|липнет|не\s+липнет|помогает|не\s+делает|лучше|хуже|нормальн|без\s+проблем)/iu;
 const EVALUATION_QUESTION = /(?:как\s+(?:тебе|вам|он|она|оно)|качество|норм|подойд|годится|стоит\s+ли|пробовал|опыт|прочн|ж[её]стк|гибк|межслой)/iu;
 const PARAMETER_QUESTION = /(?:настройк|параметр|температур|градус|скорост|обдув|поток|расход|размер|диаметр|длин|толщ|сколько|суш|ретракт|ток|процент|шаг|зазор|коэффициент|формул)/iu;
 const ENTITY_QUESTION = /(?:кто|какой|какая|какие|что|чем|производител|бренд|фирм|материал|пластик|сопло|принтер|клей|адгезив|прошив|слайсер|модель|филамент)/iu;
 const POINTER_ONLY = /^(?:в\s+лс|выше|ниже|в\s+(?:этой\s+)?теме|в\s+закрепе|в\s+(?:вики|wiki)|в\s+статьях|по\s+ссылке|гугли|ищи|уже\s+есть\s+готовые\s+решения)[.!… ]*$/iu;
+const PHOTO_REQUEST = /(?:есть|можно|покаж|скинь|пришли|отправ).{0,30}(?:фото|фотк|изображ|скрин|вид)/iu;
 const NON_ANSWER = /^(?:спасибо|благодарю|понял|поняла|ясно|ок(?:ей)?|ага|угу|круто|класс|согласен|согласна|жд[её]м|сорри|не\s+знаю|хз|ноу)[!.,… )\p{Extended_Pictographic}]*$/iu;
 const SETTING_TUPLE = /^\s*\d{1,3}(?:[.,]\d+)?(?:\s*[/\\,]\s*\d{1,3}(?:[.,]\d+)?){1,4}\s*$/u;
 const HARDNESS_ANSWER = /^\s*(?:shore\s*)?\d{2,3}\s*[adд]\s*$/iu;
@@ -186,6 +187,7 @@ function isShortNominalAnswer(text: string, questionText: string): boolean {
 function isSubstantiveAnswer(message: NormalizedMessage, questionText: string): boolean {
   const text = stripReferences(message.text);
   if (!text || evidenceQuestionLike(text) || NON_ANSWER.test(text) || POINTER_ONLY.test(text)) return false;
+  if (PHOTO_REQUEST.test(questionText) && !/(?:https?:\/\/|\[Вложение:)/iu.test(message.text)) return false;
   if (isResultMessage(message) || isRecommendationMessage(message) || isConfigurationMessage(message)) return true;
   if (DIRECT_ANSWER.test(text) || HARDNESS_ANSWER.test(text)) return true;
   if (SETTING_TUPLE.test(text) && PARAMETER_QUESTION.test(questionText)) return true;
