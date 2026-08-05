@@ -11,6 +11,7 @@ interface CliOptions {
   sameAuthorWindowMinutes: number;
   minContextScore: number;
   minScoreMargin: number;
+  minEvidenceValue: number;
   reviewSampleSize: number;
 }
 
@@ -25,6 +26,7 @@ Options:
   --same-author-window-minutes <number> Window for fragmented messages by one author (default: 45)
   --min-context-score <number>          Minimum inferred-edge score (default: 4.0)
   --min-score-margin <number>           Required gap from second-best candidate (default: 0.75)
+  --min-evidence-value <number>         Minimum knowledgeValue for evidence candidates (default: 0.6)
   --review-sample-size <number>         Stratified review sample size (default: 120)
   --help                                Show this message
 
@@ -43,6 +45,7 @@ function parseArgs(args: string[]): CliOptions {
     sameAuthorWindowMinutes: 45,
     minContextScore: 4,
     minScoreMargin: 0.75,
+    minEvidenceValue: 0.6,
     reviewSampleSize: 120,
   };
   for (let index = 0; index < args.length; index += 1) {
@@ -61,6 +64,7 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === "--same-author-window-minutes") options.sameAuthorWindowMinutes = Number(value);
     else if (arg === "--min-context-score") options.minContextScore = Number(value);
     else if (arg === "--min-score-margin") options.minScoreMargin = Number(value);
+    else if (arg === "--min-evidence-value") options.minEvidenceValue = Number(value);
     else if (arg === "--review-sample-size") options.reviewSampleSize = Number(value);
     else throw new Error(`Unknown argument: ${arg}`);
     index += 1;
@@ -81,6 +85,9 @@ try {
   ] as const) {
     if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number`);
   }
+  if (!Number.isFinite(options.minEvidenceValue) || options.minEvidenceValue < 0 || options.minEvidenceValue > 1) {
+    throw new Error("--min-evidence-value must be between 0 and 1");
+  }
   await prepareTelegramExport({
     input: resolve(options.input),
     output: resolve(options.output),
@@ -90,6 +97,7 @@ try {
     sameAuthorWindowMinutes: options.sameAuthorWindowMinutes,
     minContextScore: options.minContextScore,
     minScoreMargin: options.minScoreMargin,
+    minEvidenceValue: options.minEvidenceValue,
     reviewSampleSize: options.reviewSampleSize,
   });
 } catch (error) {
