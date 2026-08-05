@@ -8,6 +8,7 @@ import {
   type ContextOptions,
   type ThreadDraft,
 } from "./context.ts";
+import { buildEvidenceCandidates } from "./evidence.ts";
 import { buildReviewRecords, writeArtifacts, writeChunks, type SkipRecord } from "./output.ts";
 import { threadTitle, type Thread } from "./render.ts";
 import { normalizeMessage, streamTelegramMessages, type NormalizedMessage } from "./telegram.ts";
@@ -21,6 +22,7 @@ export interface PrepareOptions {
   sameAuthorWindowMinutes?: number;
   minContextScore?: number;
   minScoreMargin?: number;
+  minEvidenceValue?: number;
   reviewSampleSize?: number;
 }
 
@@ -32,15 +34,18 @@ export async function prepareTelegramExport(options: PrepareOptions): Promise<vo
     minContextScore: options.minContextScore ?? 4,
     minScoreMargin: options.minScoreMargin ?? 0.75,
   };
+  const minEvidenceValue = options.minEvidenceValue ?? 0.6;
   const chunksDir = join(options.output, "chunks");
   const quarantineDir = join(options.output, "quarantine");
   const skippedDir = join(options.output, "skipped");
   const reviewDir = join(options.output, "review");
+  const evidenceDir = join(options.output, "evidence");
   await Promise.all([
     mkdir(chunksDir, { recursive: true }),
     mkdir(quarantineDir, { recursive: true }),
     mkdir(skippedDir, { recursive: true }),
     mkdir(reviewDir, { recursive: true }),
+    mkdir(evidenceDir, { recursive: true }),
   ]);
 
   const candidates: NormalizedMessage[] = [];
@@ -125,6 +130,7 @@ export async function prepareTelegramExport(options: PrepareOptions): Promise<vo
   preliminaryThreads.sort((a, b) => a.messages[0]!.unixTime - b.messages[0]!.unixTime || a.rootId - b.rootId);
 
   const reviewRecords = buildReviewRecords(preliminaryThreads, graph.edges);
+  const evidenceCandidates = buildEvidenceCandidates(preliminaryThreads, minEvidenceValue);
   const chunkFiles = await writeChunks(preliminaryThreads, chunksDir, sourceName, options.maxChars, topicAnchors);
   const topicCounts = Object.fromEntries(
     [...new Set(preliminaryThreads.map((thread) => thread.topic))].sort().map((topic) => [topic, preliminaryThreads.filter((thread) => thread.topic === topic).length]),
@@ -137,8 +143,22 @@ export async function prepareTelegramExport(options: PrepareOptions): Promise<vo
     medium: preliminaryThreads.filter((thread) => thread.knowledgeValue >= 0.25 && thread.knowledgeValue < 0.6).length,
     high: preliminaryThreads.filter((thread) => thread.knowledgeValue >= 0.6).length,
   };
+  const evidenceStatusDistribution = {
+    ready: evidenceCandidates.filter((candidate) => candidate.status === "ready").length,
+    "question-only": evidenceCandidates.filter((candidate) => candidate.status === "question-only").length,
+    "needs-context": evidenceCandidates.filter((candidate) => candidate.status === "needs-context").length,
+    "reference-only": evidenceCandidates.filter((candidate) => candidate.status === "reference-only").length,
+  };
+  const evidenceReliabilityDistribution = {
+    C: evidenceCandidates.filter((candidate) => candidate.provisionalReliability === "C").length,
+    D: evidenceCandidates.filter((candidate) => candidate.provisionalReliability === "D").length,
+  };
+  const evidenceKindCounts = Object.fromEntries(
+    (["question", "observation", "recommendation", "result", "configuration", "reference"] as const)
+      .map((kind) => [kind, evidenceCandidates.filter((candidate) => candidate.kinds.includes(kind)).length]),
+  );
   const statistics = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     rawMessages: rawCount,
     parsedCandidateMessages: candidates.length,
     candidateMessages: effectiveCandidates.length,
@@ -154,10 +174,15 @@ export async function prepareTelegramExport(options: PrepareOptions): Promise<vo
     },
     contextGraphDiagnostics: graph.diagnostics,
     knowledgeValueDistribution,
+    evidenceCandidates: evidenceCandidates.length,
+    evidenceStatusDistribution,
+    evidenceReliabilityDistribution,
+    evidenceKindCounts,
     topicCounts,
     removalCounts,
     detectedTopicAnchors: [...topicAnchors].sort((a, b) => a - b),
     contextOptions,
+    evidenceOptions: { minKnowledgeValue: minEvidenceValue },
   };
 
   await writeArtifacts({
@@ -167,11 +192,13 @@ export async function prepareTelegramExport(options: PrepareOptions): Promise<vo
     quarantineDir,
     skippedDir,
     reviewDir,
+    evidenceDir,
     chunkFiles,
     statistics,
     skipped,
     quarantined,
     reviewRecords,
+    evidenceCandidates,
     reviewSampleSize: options.reviewSampleSize ?? 120,
   });
 
