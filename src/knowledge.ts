@@ -52,7 +52,7 @@ const GENERIC_COMPONENTS = new Set(["temperature", "speed"]);
 // Purchasing, generic model requests, broad networking discussions and printer
 // comparisons stay in individual evidence candidates instead of being merged.
 const FOCUS_PATTERNS: Array<[string, RegExp]> = [
-  ["bed-adhesion", /(?:адгези.{0,18}(?:стол|платформ)|не\s+лип|отлип|прилип|клей|адгезив|перв(?:ый|ого)\s+сло.{0,20}(?:стол|лип|платформ))/iu],
+  ["bed-adhesion", /(?:адгези.{0,18}(?:стол|платформ)|не\s+лип|отлип|прилип|перв(?:ый|ого)\s+сло.{0,20}(?:стол|лип|платформ)|(?:клей|адгезив).{0,25}(?:стол|пластин|перв(?:ый|ого)\s+сло)|(?:стол|пластин|перв(?:ый|ого)\s+сло).{0,25}(?:клей|адгезив))/iu],
   ["layer-adhesion", /(?:межсло|рассло|деламинац|по\s+слоям|слои.{0,20}(?:лома|держ|расход))/iu],
   ["warping", /(?:варпинг|загибает|загибается|угол.{0,18}(?:подня|оторв|загнул))/iu],
   ["stringing", /(?:паутин|стринг|stringing|нит(?:и|ей|ями).{0,20}(?:между|детал|перемещ)|волоск)/iu],
@@ -62,7 +62,7 @@ const FOCUS_PATTERNS: Array<[string, RegExp]> = [
   ["bridges", /(?:мост(?:ы|ов|ах)|bridge)/iu],
   ["seam", /(?<![\p{L}\p{N}_])(?:шов|шва|шву|швом|шве|швы|швов|швам|швами|швах|seam)(?![\p{L}\p{N}_])/iu],
   ["clog", /(?:засор|пробк|clog|не\s+ид[её]т\s+пластик)/iu],
-  ["drying", /(?:сушк|сушил|сушить|влажн)/iu],
+  ["drying", /(?:сушк|сушить|влажн|температур.{0,18}суш|суш.{0,18}температур)/iu],
   ["resonance", /(?:резонанс|шейпер|input\s*shap|рингинг|эхо)/iu],
   ["wobble", /(?:вобл|wobbl|z[- ]?band|вертикальн.{0,12}полос)/iu],
   ["noise", /(?:шум|скрип|стук|трещит|гул)/iu],
@@ -71,12 +71,12 @@ const FOCUS_PATTERNS: Array<[string, RegExp]> = [
   ["nozzle-cleaning", /(?:(?:чист|прочист|засор|пробк).{0,35}сопл|сопл.{0,35}(?:чист|прочист|засор|пробк))/iu],
   ["nozzle-selection", /(?:(?:какие|какое|какой|покупал|производител|латун|сталь|карбид|рубинов|комплект|где\s+взять).{0,50}сопл|сопл.{0,50}(?:покупал|производител|латун|сталь|карбид|рубинов|комплект|где\s+взять))/iu],
   ["firmware-update", /(?:(?:обновлен|обновить|update|скачать).{0,40}(?:прошив|firmware|принтер)|(?:прошив|firmware).{0,40}(?:обновлен|обновить|update|скачать))/iu],
-  ["mcu-error", /(?:mcu|shutdown|missed\s+scheduling|timer\s+too\s+close|lost\s+communication)/iu],
+  ["mcu-error", /(?:(?:mcu|klippy).{0,55}(?:ошиб|error|shutdown|не\s+наход|lost|отвал|disconnect)|(?:shutdown|missed\s+scheduling|timer\s+too\s+close|lost\s+communication).{0,55}(?:mcu|klippy)?)/iu],
   ["heater-error", /(?:(?:heater|нагрев|термистор|temperature).{0,35}(?:ошиб|error|verify|fault)|(?:ошиб|error).{0,35}(?:heater|нагрев|термистор|temperature))/iu],
   ["config-error", /(?:(?:config|printer\.cfg|макрос|gcode_macro|klipper).{0,40}(?:ошиб|error|не\s+запуск|restart)|(?:ошиб|error).{0,40}(?:config|printer\.cfg|макрос|klipper))/iu],
   ["usb-storage", /(?:usb|флешк|sd[- ]?карт|накопител)/iu],
   ["power-resume", /(?:отключен.{0,20}(?:свет|питан)|пропал.{0,15}(?:свет|питан)|возобнов|продолж.{0,15}печать|power\s*loss)/iu],
-  ["box-connection", /(?:(?:box|бокс).{0,35}(?:не\s+вид|подключ|соедин|коннект|индикац)|(?:не\s+вид|подключ|соедин|коннект).{0,35}(?:box|бокс))/iu],
+  ["box-connection", /(?:(?:box|бокс).{0,45}(?:не\s+(?:вид|определ|обнаруж|подключ|соедин|работ)|ошиб.{0,12}(?:подключ|соедин)|как\s+подключ)|(?:не\s+(?:вид|определ|обнаруж|подключ|соедин)|как\s+подключ).{0,45}(?:box|бокс))/iu],
   ["multicolor", /(?:многоцвет|смен.{0,15}цвет|цвет.{0,15}смен|purge|прочистк.{0,15}объ[её]м)/iu],
   ["chamber-heating", /(?:(?:камер).{0,30}(?:нагрев|температур|греть|обогрев)|(?:нагрев|обогрев).{0,30}камер)/iu],
   ["cooling-hardware", /(?:(?:вентилятор|кулер|fan|4010|5015).{0,35}(?:замен|менять|апгрейд|модиф|плата|голов)|(?:замен|менять|апгрейд|модиф).{0,35}(?:вентилятор|кулер|fan|4010|5015))/iu],
@@ -88,7 +88,7 @@ const FOCUS_PATTERNS: Array<[string, RegExp]> = [
   ["bed-mesh", /(?:bed[_ -]?mesh|сетка\s+стол|карта\s+стол)/iu],
   ["z-offset", /(?:z[-_ ]?offset|зет.?офсет|офсет.{0,10}z)/iu],
   ["belts", /(?<![\p{L}\p{N}_])(?:ремень|ремня|ремни|ремней|ремню|ремнём|ремнями|ремнях)(?![\p{L}\p{N}_])|натяжк.{0,15}рем(?:ня|ней|ни)/iu],
-  ["extruder-feed", /(?:экструдер|шестерн|подач.{0,20}(?:пластик|филамент))/iu],
+  ["extruder-feed", /(?:заж[её]в|застр|закус|не\s+(?:проходит|проталкива)|пробуксов|шестерн.{0,25}(?:экстру|подач|филамент)|подач.{0,25}(?:не\s|проблем|пропуск)|экструдер.{0,35}(?:заж[её]в|застр|закус|не\s+пода|пробуксов|шестерн))/iu],
   ["camera", /(?:камер[ау]\s+виде|веб.?камер|camera)/iu],
   ["ventilation", /(?:вытяжк|вентиляц|фильтр.{0,15}(?:уголь|hepa))/iu],
 ];
@@ -117,18 +117,9 @@ function rootContext(candidate: ClusterableEvidenceCandidate): string {
   return `${root?.text ?? ""}\n${candidate.title}`.trim();
 }
 
-function hasScopeAnchors(profile: EntityProfile): boolean {
-  return profile.materials.length > 0
-    || profile.materialFamilies.length > 0
-    || profile.primaryMaterialFamilies.length > 0
-    || profile.printers.length > 0
-    || profile.components.length > 0
-    || profile.brands.length > 0;
-}
 
 function scopeOf(candidate: ClusterableEvidenceCandidate): EntityProfile {
-  const rootProfile = extractEntities(rootContext(candidate));
-  const profile = hasScopeAnchors(rootProfile) ? rootProfile : candidate.entities;
+  const profile = extractEntities(rootContext(candidate));
   const materialFamilies = uniqueSorted(profile.materialFamilies);
   const primaryMaterialFamilies = uniqueSorted(profile.primaryMaterialFamilies);
   const materials = uniqueSorted(profile.materials);
@@ -224,6 +215,48 @@ function supportFingerprint(candidate: ClusterableEvidenceCandidate): string {
   return createHash("sha256").update(normalizedSupportText(candidate)).digest("hex").slice(0, 16);
 }
 
+const ROOT_STOPWORDS = new Set([
+  "qidi", "принтер", "принтера", "принтере", "печать", "печати", "печатать", "печатаю",
+  "вопрос", "подскажите", "помогите", "привет", "всем", "кто", "что", "как", "какой", "какая",
+  "какие", "может", "можно", "нужно", "надо", "есть", "это", "этот", "эта", "для", "при", "после",
+  "перед", "или", "уже", "только", "очень", "вообще", "проблема", "проблемой", "стал", "стала",
+]);
+
+function rootTokens(candidate: ClusterableEvidenceCandidate): Set<string> {
+  const normalized = rootContext(candidate)
+    .replace(/https?:\/\/\S+/giu, " ")
+    .toLowerCase()
+    .replace(/ё/gu, "е");
+  const words = normalized.match(/[\p{L}\p{N}+#.-]{3,}/gu) ?? [];
+  return new Set(words
+    .map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}+#.-]+$/gu, ""))
+    .filter((word) => word.length >= 3 && !ROOT_STOPWORDS.has(word))
+    .map((word) => word.length > 7 ? word.slice(0, 7) : word));
+}
+
+function rootsSimilar(first: ClusterableEvidenceCandidate, second: ClusterableEvidenceCandidate): boolean {
+  const left = rootTokens(first);
+  const right = rootTokens(second);
+  if (left.size === 0 || right.size === 0) return false;
+  let shared = 0;
+  for (const token of left) if (right.has(token)) shared += 1;
+  const union = left.size + right.size - shared;
+  return shared >= 3 || (shared >= 2 && union > 0 && shared / union >= 0.22);
+}
+
+function coherentSupport(support: ClusterableEvidenceCandidate[]): boolean {
+  if (support.length < 2) return false;
+  const everyCandidateHasPeer = support.every((candidate, index) => support.some((peer, peerIndex) => (
+    index !== peerIndex && rootsSimilar(candidate, peer)
+  )));
+  const crossSourcePair = support.some((candidate, index) => support.some((peer, peerIndex) => (
+    index !== peerIndex
+    && candidate.sourceName !== peer.sourceName
+    && rootsSimilar(candidate, peer)
+  )));
+  return everyCandidateHasPeer && crossSourcePair;
+}
+
 function neutralTitle(topic: string, scope: EntityProfile, focusTags: string[]): string {
   const parts = [
     ...scope.materials,
@@ -305,7 +338,8 @@ export function buildKnowledgeClusters(input: ClusterableEvidenceCandidate[]): K
       && supportFingerprints.length >= 2
       && supportSourceNames.length >= 2
       && supportRatio >= 0.5
-      && evidence.length <= 20;
+      && evidence.length <= 20
+      && coherentSupport(supportEvidence);
     const reviewPriority: KnowledgeReviewPriority = highConfidenceQueue
       ? "high"
       : supportEvidenceIds.length > 0
