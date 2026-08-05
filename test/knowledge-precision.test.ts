@@ -67,7 +67,7 @@ test("keeps a failure-mode tag without context isolated", () => {
   assert.equal(buildKnowledgeClusters([first, second]).length, 2);
 });
 
-test("merges a failure mode only when a material or printer scopes it", () => {
+test("merges a scoped failure mode but keeps incoherent root wording at medium", () => {
   const entities = {
     materials: ["PETG"],
     materialFamilies: ["PETG"],
@@ -80,7 +80,7 @@ test("merges a failure mode only when a material or printer scopes it", () => {
   const second = evidence("EVIDENCE-B-2", "qidi_filament_chat", "На PETG появился stringing", { entities });
   const clusters = buildKnowledgeClusters([first, second]);
   assert.equal(clusters.length, 1);
-  assert.equal(clusters[0]?.reviewPriority, "high");
+  assert.equal(clusters[0]?.reviewPriority, "medium");
 });
 
 test("does not count repeated automated replies as independent support", () => {
