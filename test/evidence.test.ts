@@ -52,7 +52,9 @@ test("extracts ready evidence with exact parameters and provisional C reliabilit
   assert.equal(statistics.schemaVersion, 4);
   assert.equal(statistics.evidenceCandidates, 1);
   assert.equal(candidates.length, 1);
-  assert.equal(candidates[0].schemaVersion, 2);
+  assert.equal(candidates[0].schemaVersion, 3);
+  assert.equal(candidates[0].sourceName, "fixture");
+  assert.equal(candidates[0].sourceMessages.length, 2);
   assert.equal(candidates[0].status, "ready");
   assert.equal(candidates[0].provisionalReliability, "C");
   assert.ok(candidates[0].kinds.includes("result"));

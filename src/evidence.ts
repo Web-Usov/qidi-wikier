@@ -13,9 +13,20 @@ export interface EvidenceParameter {
   messageId: number;
 }
 
+export interface EvidenceSourceMessage {
+  id: number;
+  author: string;
+  authorId: string;
+  date: string;
+  replyTo?: number;
+  text: string;
+  hasMedia: boolean;
+}
+
 export interface EvidenceCandidate {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: string;
+  sourceName: string;
   threadId: string;
   rootId: number;
   topic: string;
@@ -32,6 +43,7 @@ export interface EvidenceCandidate {
   entities: EntityProfile;
   parameters: EvidenceParameter[];
   flags: string[];
+  sourceMessages: EvidenceSourceMessage[];
   sourceExcerpt: string;
 }
 
@@ -325,7 +337,7 @@ function candidateTitle(thread: Thread): string {
   return stripReferences(preferred?.text ?? fallback?.text ?? thread.title ?? "Без названия").slice(0, 110) || "Без названия";
 }
 
-export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0.6): EvidenceCandidate[] {
+export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0.6, sourceName = "unknown"): EvidenceCandidate[] {
   return threads.flatMap((thread) => {
     if (thread.knowledgeValue < minKnowledgeValue) return [];
     const parameters = extractParameters(thread);
@@ -348,8 +360,9 @@ export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0
     const provisionalReliability = reliabilityFor(thread, status, analysis, flags);
     const dates = thread.messages.map((message) => message.date).filter(Boolean);
     return [{
-      schemaVersion: 2 as const,
+      schemaVersion: 3 as const,
       id: `EVIDENCE-${thread.id.replace(/^THREAD-/, "")}`,
+      sourceName,
       threadId: thread.id,
       rootId: thread.rootId,
       topic: thread.topic,
@@ -366,7 +379,16 @@ export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0
       entities,
       parameters,
       flags,
-      sourceExcerpt: excerpt(thread),
-    }];
+          sourceMessages: thread.messages.map((message) => ({
+            id: message.id,
+            author: message.author,
+            authorId: message.authorId,
+            date: message.date,
+            ...(message.replyTo === undefined ? {} : { replyTo: message.replyTo }),
+            text: message.text,
+            hasMedia: message.hasMedia,
+          })),
+          sourceExcerpt: excerpt(thread),
+        }];
   });
 }

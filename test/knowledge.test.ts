@@ -9,7 +9,7 @@ function candidate(
   const sourceName = overrides.sourceName ?? "qidi_common_chat";
   const numeric = Number(id.match(/(\d+)$/u)?.[1] ?? 1);
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id,
     threadId: `THREAD-${sourceName.toUpperCase().replace(/_/g, "-")}-${numeric}`,
     rootId: numeric,

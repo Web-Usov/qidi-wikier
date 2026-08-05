@@ -130,7 +130,7 @@ export async function prepareTelegramExport(options: PrepareOptions): Promise<vo
   preliminaryThreads.sort((a, b) => a.messages[0]!.unixTime - b.messages[0]!.unixTime || a.rootId - b.rootId);
 
   const reviewRecords = buildReviewRecords(preliminaryThreads, graph.edges);
-  const evidenceCandidates = buildEvidenceCandidates(preliminaryThreads, minEvidenceValue);
+  const evidenceCandidates = buildEvidenceCandidates(preliminaryThreads, minEvidenceValue, sourceName);
   const chunkFiles = await writeChunks(preliminaryThreads, chunksDir, sourceName, options.maxChars, topicAnchors);
   const topicCounts = Object.fromEntries(
     [...new Set(preliminaryThreads.map((thread) => thread.topic))].sort().map((topic) => [topic, preliminaryThreads.filter((thread) => thread.topic === topic).length]),
