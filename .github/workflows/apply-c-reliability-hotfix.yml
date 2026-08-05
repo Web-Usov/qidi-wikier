@@ -1,0 +1,73 @@
+name: Apply provisional C hotfix
+
+on:
+  push:
+    branches:
+      - agent/bootstrap-qidi-wikier
+    paths:
+      - .github/workflows/apply-c-reliability-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bootstrap-qidi-wikier
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tighten explicit result requirements
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('src/evidence.ts')
+          text = path.read_text(encoding='utf-8')
+
+          old_outcome = r'''const OUTCOME_CONTEXT = /(?:после\s+этого|в\s+итоге|в\s+результате|по\s+факту).{0,180}(?:помог|исправ|устран|заработ|перестал|пропал|исчез|стал[оа]?\s+(?:лучше|хуже|норм)|получил|сработ|держ|отлип|\d)/isu;'''
+          new_outcome = r'''const OUTCOME_CONTEXT = /(?:после\s+этого|в\s+итоге|в\s+результате|по\s+факту).{0,180}(?:помог|исправ|устран|заработ|перестал|пропал|исчез|стал[оа]?\s+(?:лучше|хуже|норм)|получил|оказал|сработ|держ|отлип)/isu;'''
+          if old_outcome not in text:
+              raise SystemExit('OUTCOME_CONTEXT pattern not found')
+          text = text.replace(old_outcome, new_outcome, 1)
+
+          old_belt = r'|рем[её]н|'
+          new_belt = r'|(?<![\p{L}\p{N}_])(?:ремень|ремня|ремни|ремней|ремню|ремнём|ремнями|ремнях)(?![\p{L}\p{N}_])|'
+          if old_belt not in text:
+              raise SystemExit('TECHNICAL_DOMAIN belt fragment not found')
+          text = text.replace(old_belt, new_belt, 1)
+
+          old_reliability = '''    const detailed = REPEATED_TEST.test(text)
+                || OUTCOME_CONTEXT.test(text)
+                || MEASUREMENT_OUTCOME.test(text)
+                || text.length >= 90;
+              return text.length >= 35 && resultParameters.length > 0 && detailed;
+          '''.replace('          ', '')
+          new_reliability = '''    const explicitOutcome = EXPLICIT_OUTCOME.test(text) || OUTCOME_CONTEXT.test(text);
+                const detailed = REPEATED_TEST.test(text)
+                  || OUTCOME_CONTEXT.test(text)
+                  || text.length >= 90;
+                return text.length >= 35 && resultParameters.length > 0 && explicitOutcome && detailed;
+          '''.replace('          ', '')
+          if old_reliability not in text:
+              raise SystemExit('Reliability block not found')
+          text = text.replace(old_reliability, new_reliability, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Verify
+        run: |
+          npm run check
+          npm test
+      - name: Commit hotfix
+        run: |
+          git config user.name "qidi-wikier-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/evidence.ts
+          git commit -m "Require explicit outcomes for provisional C"
+          git push origin HEAD:agent/bootstrap-qidi-wikier
