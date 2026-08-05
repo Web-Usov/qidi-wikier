@@ -43,5 +43,5 @@ jobs:
           git config user.name "qidi-wikier-actions"
           git config user.email "actions@users.noreply.github.com"
           git add test-diagnostics.txt
-          git commit -m "Record isolated test diagnostics"
+          git commit -m "Refresh isolated test diagnostics"
           git push origin HEAD:agent/bootstrap-qidi-wikier
