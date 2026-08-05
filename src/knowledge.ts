@@ -5,20 +5,7 @@ import type { EvidenceCandidate, EvidenceParameter } from "./evidence.ts";
 export type KnowledgeEvidenceRole = "support" | "caution" | "unresolved";
 export type KnowledgeReviewPriority = "high" | "medium" | "low";
 
-export interface EvidenceSourceMessage {
-  id: number;
-  author: string;
-  authorId: string;
-  date: string;
-  replyTo?: number;
-  text: string;
-  hasMedia: boolean;
-}
-
-export interface ClusterableEvidenceCandidate extends EvidenceCandidate {
-  sourceName?: string;
-  sourceMessages?: EvidenceSourceMessage[];
-}
+export type ClusterableEvidenceCandidate = EvidenceCandidate;
 
 export interface KnowledgeParameterVariant {
   kind: EvidenceParameter["kind"];
