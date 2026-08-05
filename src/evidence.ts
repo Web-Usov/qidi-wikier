@@ -47,18 +47,24 @@ interface EvidenceAnalysis {
 
 // JavaScript's \b is ASCII-oriented and does not form reliable boundaries around
 // Cyrillic words. All Russian outcome markers therefore use Unicode lookarounds.
-const EXPLICIT_OUTCOME = /(?<![\p{L}\p{N}_])(?:не\s+помогло|помогло|исправил(?:а|ось|ась)?|устранил(?:а|ось|ась)?|решил(?:а)?\s+(?:проблему|вопрос)|заработал(?:о|а)?|перестал(?:о|а)?|пропал(?:о|а)?|исчезл(?:о|а)?|стал(?:о|а)?\s+(?:лучше|хуже|нормально|норм)|получил(?:ся|ась|ось)?|не\s+получил(?:ся|ась|ось)?|остал(?:ся|ась)\s+доволен|сработал(?:о|а)?|отпечатал(?:ось|ась|ся)|печатает\s+(?:нормально|норм)|держится|не\s+отлипает|отлипл(?:о|а)?)(?![\p{L}\p{N}_])/iu;
+const EXPLICIT_OUTCOME = /(?<![\p{L}\p{N}_])(?:не\s+помогло|помогло|исправил(?:а|ось|ась)?|устранил(?:а|ось|ась)?|решил(?:а)?\s+(?:проблему|вопрос)|заработал(?:о|а)?|перестал(?:о|а)?|пропал(?:о|а)?|исчезл(?:о|а)?|стал(?:о|а)?\s+(?:лучше|хуже|нормально|норм)|получил(?:ся|ась|ось)|не\s+получил(?:ся|ась|ось)|остал(?:ся|ась)\s+доволен|сработал(?:о|а)?|отпечатал(?:ось|ась|ся)|печатает\s+(?:нормально|норм)|держится|не\s+отлипает|отлипл(?:о|а)?)(?![\p{L}\p{N}_])/iu;
 const OUTCOME_CONTEXT = /(?:после\s+этого|в\s+итоге|в\s+результате|по\s+факту).{0,180}(?:помог|исправ|устран|заработ|перестал|пропал|исчез|стал[оа]?\s+(?:лучше|хуже|норм)|получил|сработ|держ|отлип|\d)/isu;
 const UNCERTAIN_OUTCOME = /(?:если|когда|может|возможно|должно|должен|надеюсь|попробую|буду|планирую).{0,80}(?:помог|исправ|устран|заработ|перестан|пропад|исчез|получ|сработ|станет\s+(?:лучше|хуже|норм))/isu;
 const MEASUREMENT_OUTCOME = /(?:измерил|измерила|замерил|замерила|перепроверил|перепроверила|проверил|проверила).{0,100}(?:по\s+факту|получил|оказал|\d)/isu;
 const CONFIGURATION = /(\[(?:gcode_macro|printer|extruder|heater_|bed_mesh)[^\]]*\]|printer\.cfg|config\.cfg|\bM\d{3}\b|\bG\d{1,3}\b|\bSET_[A-Z_]+\b|\b[a-z_]+\s*:\s*[-+\d{])/mu;
 const AI_CLAIM = /(chatgpt|deepseek|дипсик|gemini|claude|гугл\s*ии|нейронк|искусственн.{0,10}интеллект)/iu;
+const EXTERNAL_ATTRIBUTION = /(?:ответил(?:и|а)?\s+(?:мне\s+)?(?:производител|поддержк|магазин|продавец)|ответ\s+(?:от\s+)?(?:производител|поддержк|магазин|продавц)|производитель\s+(?:пишет|говорит|ответил|рекомендует)|мне\s+(?:написали|ответили)\s+(?:из|от)|цитат[аы]|скопированн|пересланн)/iu;
 const MODERATION_BOT = /^Пользователь\s+.+(?:предупрежд[её]н|ограничен|заблокирован).*(?:Причина:|Действие:)/isu;
 const COMMERCE_REFERENCE = /(?:\bavito\.ru\b|\bozon(?:\.ru)?\b|wildberries|wb\.ru|aliexpress|алиэкспресс|multismol\.ru|dns-shop\.ru|\/products?\/|\/catalog\/)/iu;
+const TECHNICAL_DOMAIN = /(?:3d[- ]?(?:печ|принт)|принтер|печата|печать|слайсер|orca|klipper|g-?code|макрос|прошив|калибров|шейпер|input\s*shap|pressure\s*advance|ретракт|экстру|хотэнд|термистор|сопл|стол|камера|филамент|пластик|катуш|pla|petg|abs|asa|tpu|pa\d*|нейлон|поликарбонат|pps|peek|карбон|стекловолок|адгези|усадк|сло[йя]|мост|нависан|обдув|вентилятор|рем[её]н|шкив|направляющ|каретк|подшипник|резьб|шестерн|детал|модел(?:ь|и)|stl|step|компас|fusion|freecad|cad|qidi|q2|q1|plus\s*4|x-?max)/iu;
 const RECOMMENDATION = /(?:попробуй|пробуйте|поставь|поставьте|используй|использовать|суши|сушить|открой|закрой|подними|снизь|опусти|выключи|включи|перенеси|проверь|проверить|замени|убери|вынь|добавь|уменьши|увеличь|настрой(?:те)?(?![а-я])|настроить|калибруй|калибровать|мажь|клей\s+нужен|лучше|нужно|надо|стоит)/iu;
 const DIRECT_ANSWER = /^(?:да|нет|уже\s+нет|нельзя|можно|не\s+выйдет|не\s+получится|обязательно|не\s+обязательно|верно|точно|именно|так\s+и\s+есть)(?:\s|[,.!;:]|$)/iu;
 const EXPLANATORY_ANSWER = /^(?:это|потому|значит|зависит|скорее|похоже|разница|причина|процент|угол|перекрытие|заходишь|выбираешь|ставишь|смотри|фильтр|скорость|температура|сопло|стол|камера|поток|ретракт|кабель|питание|питалово|выключить|включить|без\s+адгезива|с\s+адгезивом|клей|адгезив)/iu;
 const QUALITATIVE_ANSWER = /(?:нравится|прочн|хрупк|ж[её]стк|гибк|подойд[её]т|не\s+подойд[её]т|держит|не\s+держит|липнет|не\s+липнет|помогает|не\s+делает|лучше|хуже|нормальн|без\s+проблем)/iu;
+const EVALUATION_QUESTION = /(?:как\s+(?:тебе|вам|он|она|оно)|качество|норм|подойд|годится|стоит\s+ли|пробовал|опыт|прочн|ж[её]стк|гибк|межслой)/iu;
+const PARAMETER_QUESTION = /(?:настройк|параметр|температур|градус|скорост|обдув|поток|расход|размер|диаметр|длин|толщ|сколько|суш|ретракт|ток|процент|шаг|зазор|коэффициент|формул)/iu;
+const ENTITY_QUESTION = /(?:кто|какой|какая|какие|что|чем|производител|бренд|фирм|материал|пластик|сопло|принтер|клей|адгезив|прошив|слайсер|модель|филамент)/iu;
+const POINTER_ONLY = /^(?:в\s+лс|выше|ниже|в\s+(?:этой\s+)?теме|в\s+закрепе|в\s+(?:вики|wiki)|в\s+статьях|по\s+ссылке|гугли|ищи|уже\s+есть\s+готовые\s+решения)[.!… ]*$/iu;
 const NON_ANSWER = /^(?:спасибо|благодарю|понял|поняла|ясно|ок(?:ей)?|ага|угу|круто|класс|согласен|согласна|жд[её]м|сорри|не\s+знаю|хз|ноу)[!.,… )\p{Extended_Pictographic}]*$/iu;
 const SETTING_TUPLE = /^\s*\d{1,3}(?:[.,]\d+)?(?:\s*[/\\,]\s*\d{1,3}(?:[.,]\d+)?){1,4}\s*$/u;
 const HARDNESS_ANSWER = /^\s*(?:shore\s*)?\d{2,3}\s*[adд]\s*$/iu;
@@ -171,7 +177,7 @@ function isConfigurationMessage(message: NormalizedMessage): boolean {
 }
 
 function isShortNominalAnswer(text: string, questionText: string): boolean {
-  if (!SHORT_NOMINAL_QUESTION.test(questionText)) return false;
+  if (!SHORT_NOMINAL_QUESTION.test(questionText) || POINTER_ONLY.test(text)) return false;
   if (text.length < 2 || text.length > 60) return false;
   const words = text.match(/[\p{L}\p{N}+#.-]+/gu) ?? [];
   return words.length >= 1 && words.length <= 5 && words.join("").length >= 3;
@@ -179,16 +185,17 @@ function isShortNominalAnswer(text: string, questionText: string): boolean {
 
 function isSubstantiveAnswer(message: NormalizedMessage, questionText: string): boolean {
   const text = stripReferences(message.text);
-  if (!text || evidenceQuestionLike(text) || NON_ANSWER.test(text)) return false;
+  if (!text || evidenceQuestionLike(text) || NON_ANSWER.test(text) || POINTER_ONLY.test(text)) return false;
   if (isResultMessage(message) || isRecommendationMessage(message) || isConfigurationMessage(message)) return true;
   if (DIRECT_ANSWER.test(text) || HARDNESS_ANSWER.test(text)) return true;
-  if (SETTING_TUPLE.test(text) && /(настройк|температур|обдув|скорост|сопл|стол|камер|поток|ретракт)/iu.test(questionText)) return true;
+  if (SETTING_TUPLE.test(text) && PARAMETER_QUESTION.test(questionText)) return true;
 
   const parameters = extractMessageParameters(message);
   const entities = extractEntities(text);
-  if (parameters.length > 0 || hasEntities(entities)) return true;
-  if (QUALITATIVE_ANSWER.test(text) && text.length >= 5) return true;
-  if (technicalScore(message) >= 3 && text.length >= 10) return true;
+  if (parameters.length > 0 && PARAMETER_QUESTION.test(questionText)) return true;
+  if (hasEntities(entities) && ENTITY_QUESTION.test(questionText)) return true;
+  if (QUALITATIVE_ANSWER.test(text) && EVALUATION_QUESTION.test(questionText) && text.length >= 5) return true;
+  if (technicalScore(message) >= 3 && text.length >= 20 && TECHNICAL_DOMAIN.test(text)) return true;
   if (EXPLANATORY_ANSWER.test(text) && text.length >= 8) return true;
   if (/\d{2,3}/u.test(text) && /(температур|градус|до\s+скольки|суш)/iu.test(questionText)) return true;
   return isShortNominalAnswer(text, questionText);
@@ -252,6 +259,12 @@ function isMeaningfulCandidate(
 ): boolean {
   const combined = thread.messages.map((message) => message.text).join("\n");
   if (MODERATION_BOT.test(combined)) return false;
+  const technicalAnchor = thread.topic !== "general"
+    || hasEntities(entities)
+    || analysis.kinds.includes("configuration")
+    || TECHNICAL_DOMAIN.test(combined);
+  if (!technicalAnchor) return false;
+
   const structured = hasEntities(entities)
     || parameters.length > 0
     || analysis.kinds.includes("configuration")
@@ -269,26 +282,29 @@ function reliabilityFor(
   thread: Thread,
   status: EvidenceStatus,
   analysis: EvidenceAnalysis,
-  entities: EntityProfile,
-  parameters: EvidenceParameter[],
   flags: string[],
 ): EvidenceReliability {
   const root = thread.messages[0];
-  const ownFollowUpResult = root && analysis.resultMessages.some((message) => (
-    message.id !== root.id
-    && message.authorId === root.authorId
-    && stripReferences(message.text).length >= 35
-  ));
-  const repeatedOrDetailed = analysis.resultMessages.some((message) => (
-    REPEATED_TEST.test(message.text) || stripReferences(message.text).length >= 70
-  ));
+  if (!root) return "D";
+
+  const qualifyingResult = analysis.resultMessages.find((message) => {
+    if (message.id === root.id || message.authorId !== root.authorId) return false;
+    const text = stripReferences(message.text);
+    const resultParameters = extractMessageParameters(message);
+    const detailed = REPEATED_TEST.test(text)
+      || OUTCOME_CONTEXT.test(text)
+      || MEASUREMENT_OUTCOME.test(text)
+      || text.length >= 90;
+    return text.length >= 35 && resultParameters.length > 0 && detailed;
+  });
+  if (!qualifyingResult) return "D";
+
+  const evidenceEntities = extractEntities(`${root.text}\n${qualifyingResult.text}`);
   const eligible = status === "ready"
     && analysis.kinds.includes("result")
-    && ownFollowUpResult
-    && repeatedOrDetailed
-    && parameters.length > 0
-    && hasEntities(entities)
+    && hasEntities(evidenceEntities)
     && !flags.includes("ai-generated-or-copied-claim")
+    && !flags.includes("external-attributed-claim")
     && !flags.includes("media-not-inspected");
   return eligible ? "C" : "D";
 }
@@ -320,13 +336,14 @@ export function buildEvidenceCandidates(threads: Thread[], minKnowledgeValue = 0
     if (thread.messages.length === 1) flags.push("single-message");
     if (thread.messages.some((message) => message.hasMedia)) flags.push("media-not-inspected");
     if (AI_CLAIM.test(combined)) flags.push("ai-generated-or-copied-claim");
+    if (EXTERNAL_ATTRIBUTION.test(combined)) flags.push("external-attributed-claim");
     if (COMMERCE_REFERENCE.test(combined)) flags.push("commerce-reference");
     if (status === "question-only") flags.push("missing-answer");
     if (status === "reference-only") flags.push("external-reference-only");
     if (status === "needs-context") flags.push("insufficient-context");
     if (analysis.answerMessages.length && !analysis.kinds.includes("result")) flags.push("answer-not-validated");
     if (thread.contextEdges.length) flags.push("has-unverified-context-edges");
-    const provisionalReliability = reliabilityFor(thread, status, analysis, entities, parameters, flags);
+    const provisionalReliability = reliabilityFor(thread, status, analysis, flags);
     const dates = thread.messages.map((message) => message.date).filter(Boolean);
     return [{
       schemaVersion: 2 as const,
