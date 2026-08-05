@@ -204,3 +204,45 @@ test("suppresses media-first social exchanges without technical substance", asyn
 
   assert.equal(candidates.length, 0);
 });
+
+test("rejects nontechnical conversations that only resemble outcomes", async () => {
+  const { candidates, statistics } = await runFixture([
+    message(150, 10, "Alex", "После голосования я получил 100% результата, всё получилось и это помогло решить вопрос. Подробный политический отчёт занял 120 минут."),
+  ]);
+
+  assert.equal(statistics.knowledgeValueDistribution.high, 1);
+  assert.equal(candidates.length, 0);
+});
+
+test("does not treat an unrelated parameter as the answer to a photo request", async () => {
+  const { candidates } = await runFixture([
+    message(160, 10, "Alex", "Печатаю PA6 на QIDI Q2 при сопле 280 C. Есть фото поверхности после печати?"),
+    message(161, 20, "Boris", "Температура стола 100 C", 160),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "question-only");
+  assert.ok(!candidates[0].kinds.includes("answer"));
+});
+
+test("requires parameters in the author's result message for provisional C", async () => {
+  const { candidates } = await runFixture([
+    message(170, 10, "Alex", "Печатаю PETG на QIDI Q2: сопло 245 C, стол 80 C, скорость 100 мм/с. Что изменить?"),
+    message(171, 20, "Alex", "После этого всё получилось заметно лучше. Повторил проверку на трёх деталях и результат сохранился.", 170),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].status, "ready");
+  assert.equal(candidates[0].provisionalReliability, "D");
+});
+
+test("blocks externally attributed responses from provisional C", async () => {
+  const { candidates } = await runFixture([
+    message(180, 10, "Alex", "Печатаю PA6 на QIDI Q2: сопло 280 C, стол 100 C. Межслойка слабая, что изменить?"),
+    message(181, 20, "Alex", "Производитель ответил: поднять сопло до 295 C. После этого стало лучше, проверил на трёх деталях при 295 C.", 180),
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.ok(candidates[0].flags.includes("external-attributed-claim"));
+  assert.equal(candidates[0].provisionalReliability, "D");
+});
