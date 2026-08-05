@@ -48,6 +48,17 @@ function candidate(
   };
 }
 
+function rootMessage(id: number, text: string, author = `Author ${id}`) {
+  return [{
+    id,
+    author,
+    authorId: `user-${id}`,
+    date: "2026-01-01T12:00:00.000Z",
+    text,
+    hasMedia: false,
+  }];
+}
+
 test("builds deterministic clusters independent of input order", () => {
   const first = candidate("EVIDENCE-A-1");
   const second = candidate("EVIDENCE-B-2", { sourceName: "qidi_q2_chat" });
@@ -57,6 +68,9 @@ test("builds deterministic clusters independent of input order", () => {
 test("never merges conflicting material or printer scopes", () => {
   const petg = candidate("EVIDENCE-A-1");
   const asa = candidate("EVIDENCE-A-2", {
+    title: "ASA на QIDI Q2 расслаивается по слоям",
+    sourceExcerpt: "[2] ASA на QIDI Q2 расслаивается по слоям",
+    sourceMessages: rootMessage(2, "ASA на QIDI Q2 расслаивается по слоям"),
     entities: {
       materials: ["ASA"],
       materialFamilies: ["ASA"],
@@ -67,6 +81,9 @@ test("never merges conflicting material or printer scopes", () => {
     },
   });
   const otherPrinter = candidate("EVIDENCE-A-3", {
+    title: "PETG на QIDI Plus4 расслаивается по слоям",
+    sourceExcerpt: "[3] PETG на QIDI Plus4 расслаивается по слоям",
+    sourceMessages: rootMessage(3, "PETG на QIDI Plus4 расслаивается по слоям"),
     entities: {
       materials: ["PETG"],
       materialFamilies: ["PETG"],
@@ -144,11 +161,13 @@ test("keeps unanchored candidates isolated", () => {
   const first = candidate("EVIDENCE-A-1", {
     title: "Неуточнённый случай",
     sourceExcerpt: "Техническое наблюдение без извлечённых сущностей.",
+    sourceMessages: rootMessage(1, "Техническое наблюдение без извлечённых сущностей."),
     entities: { materials: [], materialFamilies: [], primaryMaterialFamilies: [], printers: [], components: [], brands: [] },
   });
   const second = candidate("EVIDENCE-A-2", {
     title: "Другое неуточнённое наблюдение",
     sourceExcerpt: "Ещё один технический случай без сущностей.",
+    sourceMessages: rootMessage(2, "Ещё один технический случай без сущностей."),
     entities: { materials: [], materialFamilies: [], primaryMaterialFamilies: [], printers: [], components: [], brands: [] },
   });
   assert.equal(buildKnowledgeClusters([first, second]).length, 2);
