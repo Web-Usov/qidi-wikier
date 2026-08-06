@@ -1,25 +1,25 @@
 # QIDI Wikier
 
-Конвейер для превращения Telegram-выгрузок сообщества QIDI в проверяемую редакторскую базу знаний без потери исходного контекста.
+Конвейер для превращения Telegram-выгрузок сообщества QIDI в проверяемую редакторскую базу знаний и компактный пакет для поиска через ChatGPT.
 
-## Возможности версии 0.5.0
+## Возможности версии 0.6.0
 
 - потоковый разбор больших Telegram Desktop JSON;
 - консервативное удаление флуда, объявлений, сервисных сообщений и пустых медиа;
 - неизменяемые точные цепочки только по `reply_to_message_id`;
 - отдельный нетранзитивный граф предположительных контекстных связей;
 - извлечение материалов, принтеров, компонентов, брендов и технических параметров;
-- оценка `knowledgeValue`, не смешанная с уверенностью контекстной связи;
 - evidence schema v3 с полным provenance каждого исходного сообщения;
 - статусы `ready`, `question-only`, `needs-context`, `reference-only`;
 - типы `question`, `observation`, `answer`, `recommendation`, `result`, `configuration`, `reference`;
 - предварительные уровни только `C` и `D`; уровни `A/B` автоматически не назначаются;
-- отдельные флаги для медиа, ссылок, торговли, нейросетей и пересказов производителя/поддержки;
 - детерминированная агрегация evidence-кандидатов из нескольких источников;
 - knowledge cluster schema v2 с ролями `support`, `caution`, `unresolved`;
-- root-scoped тематическая область: поздний уход разговора в другую тему не меняет ключ кластера;
-- high-priority только при нескольких источниках, независимых авторах, разных ответах и когерентных корневых случаях;
-- Markdown-выборки для ручного аудита каждого слоя;
+- root-scoped тематическая область и строгая high-priority очередь;
+- ChatGPT-ready экспорт со стартовой инструкцией, индексом, каталогом и тематическими Markdown-пакетами;
+- сохранение Cluster ID, Evidence ID, thread ID, sourceName и message ID в поисковом пакете;
+- анонимизация имён авторов в экспортированных метаданных;
+- детерминированное разбиение слишком крупных тематических файлов;
 - GitHub Actions CI и автономная обработка приватных LFS-выгрузок.
 
 ## Требования
@@ -40,21 +40,7 @@ npm run ingest -- \
   --review-sample-size 120
 ```
 
-Дополнительные параметры:
-
-```text
---max-chars 600000
---context-window-minutes 12
---same-author-window-minutes 45
---min-context-score 4.0
---min-score-margin 0.75
---min-evidence-value 0.6
---review-sample-size 120
-```
-
 ## Агрегация нескольких источников
-
-После отдельных `ingest`:
 
 ```bash
 npm run aggregate -- \
@@ -66,7 +52,47 @@ npm run aggregate -- \
   ./prepared/qidi_filament_chat/evidence/candidates.jsonl
 ```
 
-## Производные файлы
+## Экспорт пакета для ChatGPT
+
+После агрегации:
+
+```bash
+npm run export-chat -- \
+  --clusters ./prepared/combined/knowledge/clusters.jsonl \
+  --output ./prepared/chat-ready \
+  --max-file-chars 6000000 \
+  --max-evidence-chars 3500 \
+  ./prepared/qidi_common_chat/evidence/candidates.jsonl \
+  ./prepared/qidi_q2_chat/evidence/candidates.jsonl \
+  ./prepared/qidi_box_chat/evidence/candidates.jsonl \
+  ./prepared/qidi_filament_chat/evidence/candidates.jsonl
+```
+
+Результат:
+
+```text
+prepared/chat-ready/
+├── 00_START_HERE.md
+├── 01_SEARCH_INSTRUCTIONS.md
+├── 02_INDEX.md
+├── catalog.jsonl
+├── manifest.json
+└── topics/
+    ├── calibration.md
+    ├── filaments.md
+    ├── firmware-errors.md
+    ├── general.md
+    ├── hardware.md
+    ├── mechanics.md
+    ├── print-defects.md
+    └── qidi-box.md
+```
+
+При превышении `--max-file-chars` тема разбивается на файлы с суффиксами `-01`, `-02` и далее. Каждый Cluster ID попадает ровно в один тематический файл.
+
+Пакет сохраняет исходные формулировки сообщений, но не превращает сообщения сообщества в подтверждённые технические факты. `support`, `caution` и `unresolved` остаются отдельными разделами.
+
+## Производные файлы основных слоёв
 
 ```text
 prepared/
@@ -100,7 +126,7 @@ npm run check
 npm test
 ```
 
-CI запускает обе команды после каждого изменения ветки и pull request.
+CI запускает обе команды на всех ветках и pull request.
 
 ## Границы автоматизации
 
@@ -109,6 +135,7 @@ CI запускает обе команды после каждого измен
 - `high` означает приоритет ручной проверки, а не высокую надёжность знания.
 - Фотографии и видео не анализируются.
 - Контекстные рёбра не являются доказательствами.
+- Имена авторов не выводятся в ChatGPT-ready metadata; вместо них используются стабильные анонимные псевдонимы.
 - Публикуемая карточка знания появляется только после редакторской проверки evidence, противоречий и параметров.
 
 Подробности: [архитектура](docs/ARCHITECTURE.md) и [схема знаний](docs/KNOWLEDGE_SCHEMA.md).
