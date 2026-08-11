@@ -2,8 +2,6 @@ name: CI
 
 on:
   push:
-    branches:
-      - agent/bootstrap-qidi-wikier
   pull_request:
     branches:
       - main
